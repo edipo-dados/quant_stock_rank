@@ -1,0 +1,44 @@
+# Dockerfile para Frontend Streamlit
+# Valida: Requisito 13.2
+
+FROM python:3.11-slim
+
+# Definir diretório de trabalho
+WORKDIR /app
+
+# Copiar arquivo de dependências
+COPY requirements.txt .
+
+# Instalar dependências Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código da aplicação
+COPY frontend/ ./frontend/
+COPY app/ ./app/
+
+# Criar diretório para cache do Streamlit
+RUN mkdir -p /root/.streamlit
+
+# Configurar Streamlit
+RUN echo "[server]\n\
+headless = true\n\
+port = 8501\n\
+enableCORS = false\n\
+enableXsrfProtection = false\n\
+\n\
+[browser]\n\
+gatherUsageStats = false\n\
+" > /root/.streamlit/config.toml
+
+# Expor porta do Streamlit
+EXPOSE 8501
+
+# Variáveis de ambiente padrão
+ENV PYTHONUNBUFFERED=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Comando de inicialização do Streamlit
+CMD ["streamlit", "run", "frontend/streamlit_app.py", "--server.address", "0.0.0.0"]

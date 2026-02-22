@@ -1,0 +1,418 @@
+"""
+Rotas da API REST.
+
+Define todos os endpoints da API para acesso aos rankings e scores.
+
+Valida: Requisitos 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+from datetime import date as date_type
+from typing import Optional
+import logging
+
+from app.api.dependencies import get_db
+from app.api.schemas import (
+    RankingResponse,
+    AssetDetailResponse,
+    TopAssetsResponse,
+    AssetScore,
+    FactorBreakdown,
+    ScoreBreakdown,
+    ErrorResponse
+)
+from app.models.schemas import ScoreDaily, FeatureDaily, FeatureMonthly
+from app.scoring.scoring_engine import ScoreResult
+from app.scoring.ranker import RankingEntry
+from app.report.report_generator import ReportGenerator
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+def _get_latest_date(db: Session) -> Optional[date_type]:
+    """
+    Obtém a data mais recente com scores disponíveis.
+    
+    Args:
+        db: Sessão do banco de dados
+        
+    Returns:
+        Data mais recente ou None se não houver dados
+    """
+    latest = db.query(ScoreDaily.date).order_by(desc(ScoreDaily.date)).first()
+    return latest[0] if latest else None
+
+
+def _score_daily_to_asset_score(score_daily: ScoreDaily) -> AssetScore:
+    """
+    Converte ScoreDaily (SQLAlchemy) para AssetScore (Pydantic).
+    
+    Args:
+        score_daily: Registro do banco de dados
+        
+    Returns:
+        AssetScore: Schema Pydantic
+    """
+    breakdown = FactorBreakdown(
+        momentum_score=score_daily.momentum_score,
+        quality_score=score_daily.quality_score,
+        value_score=score_daily.value_score
+    )
+    
+    return AssetScore(
+        ticker=score_daily.ticker,
+        date=score_daily.date,
+        final_score=score_daily.final_score,
+        breakdown=breakdown,
+        confidence=score_daily.confidence,
+        rank=score_daily.rank
+    )
+
+
+def _score_daily_to_score_breakdown(score_daily: ScoreDaily) -> ScoreBreakdown:
+    """
+    Converte ScoreDaily (SQLAlchemy) para ScoreBreakdown (Pydantic).
+    
+    Args:
+        score_daily: Registro do banco de dados
+        
+    Returns:
+        ScoreBreakdown: Schema Pydantic com breakdown detalhado
+    """
+    # Extrair risk_penalties do JSON, usar dict vazio se None
+    risk_penalties = score_daily.risk_penalties if score_daily.risk_penalties else {}
+    
+    # Extrair exclusion_reasons do JSON, usar lista vazia se None
+    exclusion_reasons = score_daily.exclusion_reasons if score_daily.exclusion_reasons else []
+    
+    # Calcular penalty_factor: se não houver base_score, usar 1.0
+    if score_daily.base_score and score_daily.base_score != 0:
+        penalty_factor = score_daily.final_score / score_daily.base_score
+    else:
+        penalty_factor = score_daily.risk_penalty_factor if score_daily.risk_penalty_factor else 1.0
+    
+    return ScoreBreakdown(
+        ticker=score_daily.ticker,
+        date=score_daily.date,
+        final_score=score_daily.final_score,
+        base_score=score_daily.base_score if score_daily.base_score else score_daily.final_score,
+        momentum_score=score_daily.momentum_score,
+        quality_score=score_daily.quality_score,
+        value_score=score_daily.value_score,
+        confidence=score_daily.confidence,
+        passed_eligibility=score_daily.passed_eligibility if score_daily.passed_eligibility is not None else True,
+        exclusion_reasons=exclusion_reasons,
+        risk_penalties=risk_penalties,
+        penalty_factor=penalty_factor,
+        rank=score_daily.rank
+    )
+
+
+@router.get(
+    "/ranking",
+    response_model=RankingResponse,
+    summary="Obter ranking diário completo",
+    description="Retorna o ranking diário completo de todos os ativos ordenados por score final.",
+    responses={
+        200: {"description": "Ranking retornado com sucesso"},
+        404: {"model": ErrorResponse, "description": "Nenhum dado disponível para a data especificada"}
+    }
+)
+async def get_ranking(
+    date: Optional[date_type] = Query(
+        None,
+        description="Data do ranking (formato YYYY-MM-DD). Se não fornecido, usa a data mais recente."
+    ),
+    db: Session = Depends(get_db)
+) -> RankingResponse:
+    """
+    Retorna ranking diário completo ordenado por score.
+    
+    Se a data não for fornecida, usa a data mais recente disponível no banco.
+    O ranking é ordenado por score final em ordem decrescente (maior score = melhor posição).
+    
+    Args:
+        date: Data do ranking (opcional)
+        db: Sessão do banco de dados
+        
+    Returns:
+        RankingResponse com lista completa de ativos rankeados
+        
+    Raises:
+        HTTPException 404: Se não houver dados para a data especificada
+        
+    Valida: Requisito 6.1
+    """
+    # Se data não fornecida, usar a mais recente
+    if date is None:
+        date = _get_latest_date(db)
+        if date is None:
+            logger.warning("No scores available in database")
+            raise HTTPException(
+                status_code=404,
+                detail="Nenhum score disponível no banco de dados"
+            )
+        logger.info(f"Using latest date: {date}")
+    
+    # Buscar todos os scores para a data, ordenados por score final
+    scores = db.query(ScoreDaily).filter(
+        ScoreDaily.date == date
+    ).order_by(
+        desc(ScoreDaily.final_score)
+    ).all()
+    
+    if not scores:
+        logger.warning(f"No scores found for date {date}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Nenhum score encontrado para a data {date}"
+        )
+    
+    # Converter para ScoreBreakdown
+    score_breakdowns = [_score_daily_to_score_breakdown(score) for score in scores]
+    
+    logger.info(
+        f"Returning ranking for {date} with {len(score_breakdowns)} assets. "
+        f"Top asset: {score_breakdowns[0].ticker} (score={score_breakdowns[0].final_score:.3f})"
+    )
+    
+    return RankingResponse(
+        date=date,
+        rankings=score_breakdowns,
+        total_assets=len(score_breakdowns)
+    )
+
+
+@router.get(
+    "/asset/{ticker}",
+    response_model=AssetDetailResponse,
+    summary="Obter detalhes de um ativo",
+    description="Retorna score completo, breakdown, posição no ranking e explicação para um ativo específico.",
+    responses={
+        200: {"description": "Detalhes do ativo retornados com sucesso"},
+        404: {"model": ErrorResponse, "description": "Ticker não encontrado"}
+    }
+)
+async def get_asset_detail(
+    ticker: str,
+    date: Optional[date_type] = Query(
+        None,
+        description="Data do score (formato YYYY-MM-DD). Se não fornecido, usa a data mais recente."
+    ),
+    db: Session = Depends(get_db)
+) -> AssetDetailResponse:
+    """
+    Retorna detalhes completos de um ativo.
+    
+    Inclui:
+    - Score final e breakdown por categoria
+    - Posição no ranking
+    - Explicação automática em português
+    - Fatores brutos normalizados
+    
+    Args:
+        ticker: Símbolo do ativo
+        date: Data do score (opcional)
+        db: Sessão do banco de dados
+        
+    Returns:
+        AssetDetailResponse com todos os detalhes do ativo
+        
+    Raises:
+        HTTPException 404: Se o ticker não for encontrado
+        
+    Valida: Requisitos 6.2, 6.3, 6.4, 6.5, 6.7
+    """
+    # Se data não fornecida, usar a mais recente
+    if date is None:
+        date = _get_latest_date(db)
+        if date is None:
+            logger.warning("No scores available in database")
+            raise HTTPException(
+                status_code=404,
+                detail="Nenhum score disponível no banco de dados"
+            )
+        logger.info(f"Using latest date: {date}")
+    
+    # Buscar score do ticker
+    score_daily = db.query(ScoreDaily).filter(
+        ScoreDaily.ticker == ticker.upper(),
+        ScoreDaily.date == date
+    ).first()
+    
+    if not score_daily:
+        logger.warning(f"Ticker {ticker} not found for date {date}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ticker {ticker} não encontrado para a data {date}"
+        )
+    
+    # Converter para ScoreBreakdown
+    score_breakdown = _score_daily_to_score_breakdown(score_daily)
+    
+    # Buscar fatores brutos (daily + monthly)
+    raw_factors = {}
+    
+    # Fatores diários (momentum)
+    feature_daily = db.query(FeatureDaily).filter(
+        FeatureDaily.ticker == ticker.upper(),
+        FeatureDaily.date == date
+    ).first()
+    
+    if feature_daily:
+        raw_factors.update({
+            'return_6m': feature_daily.return_6m,
+            'return_12m': feature_daily.return_12m,
+            'rsi_14': feature_daily.rsi_14,
+            'volatility_90d': feature_daily.volatility_90d,
+            'recent_drawdown': feature_daily.recent_drawdown
+        })
+    
+    # Fatores mensais (fundamentalistas)
+    # Buscar o mês correspondente à data
+    month_start = date.replace(day=1)
+    feature_monthly = db.query(FeatureMonthly).filter(
+        FeatureMonthly.ticker == ticker.upper(),
+        FeatureMonthly.month == month_start
+    ).first()
+    
+    if feature_monthly:
+        raw_factors.update({
+            'roe': feature_monthly.roe,
+            'net_margin': feature_monthly.net_margin,
+            'revenue_growth_3y': feature_monthly.revenue_growth_3y,
+            'debt_to_ebitda': feature_monthly.debt_to_ebitda,
+            'pe_ratio': feature_monthly.pe_ratio,
+            'ev_ebitda': feature_monthly.ev_ebitda,
+            'pb_ratio': feature_monthly.pb_ratio
+        })
+    
+    # Remover valores None
+    raw_factors = {k: v for k, v in raw_factors.items() if v is not None}
+    
+    # Gerar explicação
+    score_result = ScoreResult(
+        ticker=score_daily.ticker,
+        final_score=score_daily.final_score,
+        momentum_score=score_daily.momentum_score,
+        quality_score=score_daily.quality_score,
+        value_score=score_daily.value_score,
+        confidence=score_daily.confidence,
+        raw_factors=raw_factors
+    )
+    
+    ranking_entry = RankingEntry(
+        ticker=score_daily.ticker,
+        score=score_daily.final_score,
+        rank=score_daily.rank,
+        confidence=score_daily.confidence,
+        momentum_score=score_daily.momentum_score,
+        quality_score=score_daily.quality_score,
+        value_score=score_daily.value_score
+    )
+    
+    report_generator = ReportGenerator()
+    explanation = report_generator.generate_asset_explanation(
+        ticker=ticker.upper(),
+        score_result=score_result,
+        ranking_entry=ranking_entry
+    )
+    
+    logger.info(
+        f"Returning details for {ticker} on {date}. "
+        f"Score: {score_breakdown.final_score:.3f}, "
+        f"Passed eligibility: {score_breakdown.passed_eligibility}"
+    )
+    
+    return AssetDetailResponse(
+        ticker=ticker.upper(),
+        score=score_breakdown,
+        explanation=explanation,
+        raw_factors=raw_factors
+    )
+
+
+@router.get(
+    "/top",
+    response_model=TopAssetsResponse,
+    summary="Obter top N ativos",
+    description="Retorna os top N ativos com maior score final.",
+    responses={
+        200: {"description": "Top N ativos retornados com sucesso"},
+        404: {"model": ErrorResponse, "description": "Nenhum dado disponível"}
+    }
+)
+async def get_top_assets(
+    n: int = Query(
+        10,
+        ge=1,
+        le=100,
+        description="Número de ativos a retornar (padrão: 10, máximo: 100)"
+    ),
+    date: Optional[date_type] = Query(
+        None,
+        description="Data do ranking (formato YYYY-MM-DD). Se não fornecido, usa a data mais recente."
+    ),
+    db: Session = Depends(get_db)
+) -> TopAssetsResponse:
+    """
+    Retorna top N ativos por score final.
+    
+    Retorna os N ativos com maior score final para a data especificada.
+    Se existirem menos de N ativos, retorna todos os disponíveis.
+    
+    Args:
+        n: Número de ativos a retornar (padrão: 10)
+        date: Data do ranking (opcional)
+        db: Sessão do banco de dados
+        
+    Returns:
+        TopAssetsResponse com lista dos top N ativos
+        
+    Raises:
+        HTTPException 404: Se não houver dados para a data especificada
+        
+    Valida: Requisito 6.6
+    """
+    # Se data não fornecida, usar a mais recente
+    if date is None:
+        date = _get_latest_date(db)
+        if date is None:
+            logger.warning("No scores available in database")
+            raise HTTPException(
+                status_code=404,
+                detail="Nenhum score disponível no banco de dados"
+            )
+        logger.info(f"Using latest date: {date}")
+    
+    # Buscar top N scores para a data, ordenados por score final
+    scores = db.query(ScoreDaily).filter(
+        ScoreDaily.date == date
+    ).order_by(
+        desc(ScoreDaily.final_score)
+    ).limit(n).all()
+    
+    if not scores:
+        logger.warning(f"No scores found for date {date}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Nenhum score encontrado para a data {date}"
+        )
+    
+    # Converter para ScoreBreakdown
+    top_breakdowns = [_score_daily_to_score_breakdown(score) for score in scores]
+    
+    logger.info(
+        f"Returning top {len(top_breakdowns)} assets for {date}. "
+        f"Top asset: {top_breakdowns[0].ticker} (score={top_breakdowns[0].final_score:.3f})"
+    )
+    
+    return TopAssetsResponse(
+        date=date,
+        top_assets=top_breakdowns,
+        n=n
+    )

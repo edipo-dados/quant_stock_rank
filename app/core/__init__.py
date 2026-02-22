@@ -1,0 +1,1 @@
+"""Componentes core do sistema."""
