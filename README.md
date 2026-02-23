@@ -17,6 +17,7 @@ O resultado é um ranking objetivo que identifica as ações mais atrativas segu
 - ✅ **Dados em Tempo Real**: Integração com Yahoo Finance
 - ✅ **API REST**: Endpoints para integração
 - ✅ **Interface Web**: Dashboard interativo com Streamlit
+- ✅ **MCP Server**: Integração com agentes conversacionais (Claude, ChatGPT, etc.)
 - ✅ **Docker**: Deploy simplificado com containers
 - ✅ **Rate Limiting**: Proteção contra bloqueio de APIs
 - ✅ **Modo Incremental**: Atualizações eficientes
@@ -151,6 +152,25 @@ curl http://localhost:8000/api/v1/prices/PETR4.SA?days=365
 Acesse http://localhost:8501 e navegue pelas páginas:
 - **🏆 Ranking**: Lista completa de ativos ranqueados
 - **📊 Detalhes do Ativo**: Análise detalhada por ticker
+
+### Usar MCP Server (Agentes Conversacionais)
+
+O MCP Server permite que agentes de IA (Claude, ChatGPT, etc.) acessem os dados de ranking:
+
+```bash
+# Instalar dependências
+pip install mcp httpx
+
+# Iniciar MCP server
+python mcp_server.py
+```
+
+Configure no seu cliente MCP (Claude Desktop, Cline, etc.) e converse naturalmente:
+- "Quais são as 5 melhores ações para investir?"
+- "Me fale sobre PETR4.SA"
+- "Compare VALE3.SA com ITUB4.SA"
+
+Veja documentação completa em [MCP_SERVER.md](MCP_SERVER.md).
 
 ## 📈 Metodologia
 
