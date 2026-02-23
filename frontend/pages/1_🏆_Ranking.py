@@ -90,9 +90,24 @@ if ranking_data:
     
     with col3:
         if rankings:
-            top_ticker = rankings[0]['ticker']
-            top_score = rankings[0]['final_score']
-            st.metric("Melhor Ativo", f"{top_ticker} ({top_score:.3f})")
+            top_ticker = rankings[0].get('ticker', 'N/A')
+            top_score = rankings[0].get('final_score')
+            
+            # Formatar o valor do melhor ativo de forma segura
+            melhor_ativo_text = str(top_ticker)
+            if top_score is not None:
+                try:
+                    score_value = float(top_score)
+                    if not pd.isna(score_value):
+                        melhor_ativo_text = melhor_ativo_text + " (" + "{:.3f}".format(score_value) + ")"
+                    else:
+                        melhor_ativo_text = melhor_ativo_text + " (N/A)"
+                except (ValueError, TypeError):
+                    melhor_ativo_text = melhor_ativo_text + " (N/A)"
+            else:
+                melhor_ativo_text = melhor_ativo_text + " (N/A)"
+            
+            st.metric("Melhor Ativo", melhor_ativo_text)
     
     st.divider()
     
@@ -102,25 +117,37 @@ if ranking_data:
         for asset in rankings:
             # Verificar elegibilidade
             passed_eligibility = asset.get('passed_eligibility', True)
-            penalty_factor = asset.get('penalty_factor', 1.0)
+            penalty_factor = asset.get('penalty_factor', 1.0) or 1.0
             
             # Adicionar indicadores visuais
-            ticker_display = asset['ticker']
+            ticker_display = asset.get('ticker', 'N/A')
             if not passed_eligibility:
-                ticker_display = f"⚠️ {ticker_display}"
+                ticker_display = "⚠️ {}".format(ticker_display)
             elif penalty_factor < 1.0:
-                ticker_display = f"🛡️ {ticker_display}"
+                ticker_display = "🛡️ {}".format(ticker_display)
+            
+            # Função auxiliar para tratar valores None/NaN
+            def safe_round(value, decimals=3):
+                if value is None:
+                    return 0.0
+                try:
+                    # Verificar se é NaN
+                    if pd.isna(value):
+                        return 0.0
+                    return round(float(value), decimals)
+                except (ValueError, TypeError):
+                    return 0.0
             
             df_data.append({
-                'Posição': asset.get('rank', 0),
+                'Posição': asset.get('rank', 0) or 0,
                 'Ticker': ticker_display,
-                'Score Final': round(asset['final_score'], 3),
-                'Score Base': round(asset.get('base_score', asset['final_score']), 3),
-                'Penalidade': round(penalty_factor, 3),
-                'Momentum': round(asset.get('momentum_score', 0.0), 3),
-                'Qualidade': round(asset.get('quality_score', 0.0), 3),
-                'Valor': round(asset.get('value_score', 0.0), 3),
-                'Confiança': round(asset['confidence'], 2)
+                'Score Final': safe_round(asset.get('final_score'), 3),
+                'Score Base': safe_round(asset.get('base_score', asset.get('final_score')), 3),
+                'Penalidade': safe_round(penalty_factor, 3),
+                'Momentum': safe_round(asset.get('momentum_score'), 3),
+                'Qualidade': safe_round(asset.get('quality_score'), 3),
+                'Valor': safe_round(asset.get('value_score'), 3),
+                'Confiança': safe_round(asset.get('confidence', 0.0), 2)
             })
         
         df = pd.DataFrame(df_data)
@@ -225,19 +252,19 @@ if ranking_data:
         
         with col1:
             avg_score = df['Score Final'].mean()
-            st.metric("Score Médio", f"{avg_score:.3f}")
+            st.metric("Score Médio", f"{avg_score:.3f}" if not pd.isna(avg_score) else "N/A")
         
         with col2:
             max_score = df['Score Final'].max()
-            st.metric("Score Máximo", f"{max_score:.3f}")
+            st.metric("Score Máximo", f"{max_score:.3f}" if not pd.isna(max_score) else "N/A")
         
         with col3:
             min_score = df['Score Final'].min()
-            st.metric("Score Mínimo", f"{min_score:.3f}")
+            st.metric("Score Mínimo", f"{min_score:.3f}" if not pd.isna(min_score) else "N/A")
         
         with col4:
             std_score = df['Score Final'].std()
-            st.metric("Desvio Padrão", f"{std_score:.3f}")
+            st.metric("Desvio Padrão", f"{std_score:.3f}" if not pd.isna(std_score) else "N/A")
         
     else:
         st.warning("Nenhum ativo encontrado no ranking.")

@@ -113,16 +113,20 @@ class ScoringEngine:
             
         Valida: Requisitos 4.1
         """
+        import math
+        
         required_factors = ['return_6m', 'return_12m', 'rsi_14', 'volatility_90d', 'recent_drawdown']
         
-        # Coleta fatores disponíveis (não None)
+        # Coleta fatores disponíveis (não None e não NaN)
         momentum_factors = []
         for factor_name in required_factors:
-            if factor_name in factors and factors[factor_name] is not None:
+            value = factors.get(factor_name)
+            # Verificar se o valor é válido (não None e não NaN)
+            if value is not None and not (isinstance(value, float) and math.isnan(value)):
                 if factor_name in ['volatility_90d', 'recent_drawdown']:
-                    momentum_factors.append(-factors[factor_name])  # Invertido
+                    momentum_factors.append(-value)  # Invertido
                 else:
-                    momentum_factors.append(factors[factor_name])
+                    momentum_factors.append(value)
         
         # Se nenhum fator disponível, retorna 0
         if not momentum_factors:
@@ -163,16 +167,20 @@ class ScoringEngine:
             
         Valida: Requisitos 4.2
         """
+        import math
+        
         required_factors = ['roe_mean_3y', 'roe_volatility', 'net_margin', 'revenue_growth_3y', 'debt_to_ebitda']
         
-        # Coleta fatores disponíveis (não None)
+        # Coleta fatores disponíveis (não None e não NaN)
         quality_factors = []
         for factor_name in required_factors:
-            if factor_name in factors and factors[factor_name] is not None:
+            value = factors.get(factor_name)
+            # Verificar se o valor é válido (não None e não NaN)
+            if value is not None and not (isinstance(value, float) and math.isnan(value)):
                 if factor_name in ['debt_to_ebitda', 'roe_volatility']:
-                    quality_factors.append(-factors[factor_name])  # Invertido
+                    quality_factors.append(-value)  # Invertido
                 else:
-                    quality_factors.append(factors[factor_name])
+                    quality_factors.append(value)
         
         # Se nenhum fator disponível, retorna 0
         if not quality_factors:
@@ -183,12 +191,12 @@ class ScoringEngine:
         
         # Aplicar penalidade por prejuízo recente
         net_income_last_year = factors.get('net_income_last_year')
-        if net_income_last_year is not None and net_income_last_year < 0:
+        if net_income_last_year is not None and not (isinstance(net_income_last_year, float) and math.isnan(net_income_last_year)) and net_income_last_year < 0:
             quality_score *= 0.4
         
         # Aplicar penalização progressiva de endividamento
         debt_to_ebitda_raw = factors.get('debt_to_ebitda_raw')  # Valor não normalizado
-        if debt_to_ebitda_raw is not None:
+        if debt_to_ebitda_raw is not None and not (isinstance(debt_to_ebitda_raw, float) and math.isnan(debt_to_ebitda_raw)):
             if debt_to_ebitda_raw > 5:
                 quality_score *= 0.7  # Penalização forte
             elif debt_to_ebitda_raw > 3:
@@ -309,13 +317,17 @@ class ScoringEngine:
             
         Valida: Requisitos 4.3
         """
+        import math
+        
         required_factors = ['pe_ratio', 'ev_ebitda', 'pb_ratio']
         
-        # Coleta fatores disponíveis (não None)
+        # Coleta fatores disponíveis (não None e não NaN)
         value_factors = []
         for factor_name in required_factors:
-            if factor_name in factors and factors[factor_name] is not None:
-                value_factors.append(-factors[factor_name])  # Invertido
+            value = factors.get(factor_name)
+            # Verificar se o valor é válido (não None e não NaN)
+            if value is not None and not (isinstance(value, float) and math.isnan(value)):
+                value_factors.append(-value)  # Invertido
         
         # Se nenhum fator disponível, retorna 0
         if not value_factors:

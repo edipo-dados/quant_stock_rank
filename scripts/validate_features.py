@@ -60,7 +60,7 @@ def validate_features():
         normalizer = CrossSectionalNormalizer()
         feature_service = FeatureService(db)
         
-        print("✓ Serviços inicializados")
+        print("[OK] Servicos inicializados")
         print()
         
         # Teste 1: Calcular fatores fundamentalistas
@@ -80,7 +80,7 @@ def validate_features():
             fundamental_factors[ticker] = factors
             print(f"  {ticker}: {len([k for k, v in factors.items() if v is not None])} fatores calculados")
         
-        print("✓ Fatores fundamentalistas calculados com sucesso")
+        print("[OK] Fatores fundamentalistas calculados com sucesso")
         print()
         
         # Teste 2: Calcular fatores de momentum
@@ -94,7 +94,7 @@ def validate_features():
             momentum_factors[ticker] = factors
             print(f"  {ticker}: {len([k for k, v in factors.items() if v is not None])} fatores calculados")
         
-        print("✓ Fatores de momentum calculados com sucesso")
+        print("[OK] Fatores de momentum calculados com sucesso")
         print()
         
         # Teste 3: Normalizar fatores
@@ -113,7 +113,7 @@ def validate_features():
             std = normalized_momentum[col].std()
             print(f"  {col}: mean={mean:.4f}, std={std:.4f}")
         
-        print("✓ Normalização aplicada com sucesso")
+        print("[OK] Normalizacao aplicada com sucesso")
         print()
         
         # Teste 4: Salvar features diárias
@@ -132,7 +132,7 @@ def validate_features():
             saved_count += 1
         
         db.commit()
-        print(f"✓ {saved_count} registros de features diárias salvos")
+        print(f"[OK] {saved_count} registros de features diarias salvos")
         print()
         
         # Teste 5: Verificar features salvas
@@ -152,9 +152,9 @@ def validate_features():
                 ])
                 print(f"  {ticker}: {non_null_count} fatores recuperados do banco")
             else:
-                print(f"  {ticker}: ❌ Não encontrado no banco")
+                print(f"  {ticker}: [ERRO] Nao encontrado no banco")
         
-        print("✓ Features recuperadas com sucesso")
+        print("[OK] Features recuperadas com sucesso")
         print()
         
         # Teste 6: Salvar features mensais
@@ -179,7 +179,7 @@ def validate_features():
             saved_count += 1
         
         db.commit()
-        print(f"✓ {saved_count} registros de features mensais salvos")
+        print(f"[OK] {saved_count} registros de features mensais salvos")
         print()
         
         # Teste 7: Verificar features mensais salvas
@@ -200,27 +200,27 @@ def validate_features():
                 ])
                 print(f"  {ticker}: {non_null_count} fatores recuperados do banco")
             else:
-                print(f"  {ticker}: ❌ Não encontrado no banco")
+                print(f"  {ticker}: [ERRO] Nao encontrado no banco")
         
-        print("✓ Features mensais recuperadas com sucesso")
+        print("[OK] Features mensais recuperadas com sucesso")
         print()
         
         # Resumo final
         print("=" * 60)
-        print("✅ VALIDAÇÃO CONCLUÍDA COM SUCESSO")
+        print("[OK] VALIDACAO CONCLUIDA COM SUCESSO")
         print("=" * 60)
         print()
         print("Resumo:")
         print(f"  • {len(tickers)} tickers testados")
         print(f"  • {len(factor_columns)} fatores de momentum calculados")
         print(f"  • {len(fund_columns)} fatores fundamentalistas calculados")
-        print(f"  • Features diárias salvas e recuperadas: ✓")
-        print(f"  • Features mensais salvas e recuperadas: ✓")
-        print(f"  • Normalização cross-sectional aplicada: ✓")
+        print(f"  • Features diarias salvas e recuperadas: [OK]")
+        print(f"  • Features mensais salvas e recuperadas: [OK]")
+        print(f"  • Normalizacao cross-sectional aplicada: [OK]")
         print()
         
     except Exception as e:
-        print(f"❌ Erro durante validação: {e}")
+        print(f"[ERRO] Erro durante validacao: {e}")
         import traceback
         traceback.print_exc()
         return False

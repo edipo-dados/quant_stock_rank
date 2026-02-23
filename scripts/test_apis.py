@@ -35,7 +35,7 @@ def test_yahoo_finance_prices():
         df = client.fetch_daily_prices("PETR4.SA", start_date, end_date)
         
         if not df.empty:
-            logger.info(f"✓ Yahoo Finance (Preços) OK - {len(df)} dias de dados para PETR4.SA")
+            logger.info(f"[OK] Yahoo Finance (Precos) OK - {len(df)} dias de dados para PETR4.SA")
             return True
         else:
             logger.warning("✗ Yahoo Finance (Preços) retornou dados vazios")
@@ -56,7 +56,7 @@ def test_yahoo_finance_fundamentals():
         data = client.fetch_all_fundamentals("PETR4.SA", period="annual")
         
         if data and len(data.get("income_statement", [])) > 0:
-            logger.info(f"✓ Yahoo Finance (Fundamentalistas) OK - Dados recebidos para PETR4.SA")
+            logger.info(f"[OK] Yahoo Finance (Fundamentalistas) OK - Dados recebidos para PETR4.SA")
             return True
         else:
             logger.warning("✗ Yahoo Finance (Fundamentalistas) retornou dados vazios")
@@ -83,12 +83,12 @@ def main():
     logger.info("=" * 80)
     logger.info("RESULTADO DOS TESTES")
     logger.info("=" * 80)
-    logger.info(f"Yahoo Finance (Preços): {'✓ OK' if yahoo_prices_ok else '✗ FALHOU'}")
-    logger.info(f"Yahoo Finance (Fundamentalistas): {'✓ OK' if yahoo_fundamentals_ok else '✗ FALHOU'}")
+    logger.info(f"Yahoo Finance (Precos): {'[OK]' if yahoo_prices_ok else '[FALHOU]'}")
+    logger.info(f"Yahoo Finance (Fundamentalistas): {'[OK]' if yahoo_fundamentals_ok else '[FALHOU]'}")
     logger.info("")
     
     if yahoo_prices_ok and yahoo_fundamentals_ok:
-        logger.info("✓ Todas as APIs estão funcionando!")
+        logger.info("[OK] Todas as APIs estao funcionando!")
         return 0
     elif yahoo_prices_ok or yahoo_fundamentals_ok:
         logger.warning("⚠ Algumas APIs estão funcionando, outras não")

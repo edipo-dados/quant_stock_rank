@@ -224,3 +224,54 @@ class ScoreDaily(Base):
     
     def __repr__(self):
         return f"<ScoreDaily(ticker={self.ticker}, date={self.date}, final_score={self.final_score}, rank={self.rank})>"
+
+
+class PipelineExecution(Base):
+    """
+    Tabela para rastrear execuções do pipeline e controlar cargas incrementais.
+    
+    Permite identificar a última execução bem-sucedida e determinar
+    se deve fazer carga FULL ou INCREMENTAL.
+    """
+    __tablename__ = "pipeline_executions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Identificação da execução
+    execution_date = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    execution_type = Column(String(20), nullable=False)  # 'FULL' ou 'INCREMENTAL'
+    mode = Column(String(20), nullable=False)  # 'test', 'liquid', 'manual'
+    
+    # Status da execução
+    status = Column(String(20), nullable=False)  # 'RUNNING', 'SUCCESS', 'FAILED', 'PARTIAL'
+    started_at = Column(DateTime, nullable=False)
+    completed_at = Column(DateTime)
+    
+    # Estatísticas da execução
+    tickers_processed = Column(Integer, default=0)
+    tickers_success = Column(Integer, default=0)
+    tickers_failed = Column(Integer, default=0)
+    
+    # Detalhes por etapa
+    prices_ingested = Column(Integer, default=0)
+    fundamentals_ingested = Column(Integer, default=0)
+    features_calculated = Column(Integer, default=0)
+    scores_calculated = Column(Integer, default=0)
+    
+    # Período de dados processados
+    data_start_date = Column(Date)  # Data inicial dos dados processados
+    data_end_date = Column(Date)    # Data final dos dados processados
+    
+    # Metadados
+    tickers_list = Column(JSON)  # Lista de tickers processados
+    error_log = Column(JSON)     # Log de erros se houver
+    config_snapshot = Column(JSON)  # Snapshot da configuração usada
+    
+    # Índices
+    __table_args__ = (
+        Index('idx_execution_date_status', 'execution_date', 'status'),
+        Index('idx_execution_type', 'execution_type'),
+    )
+    
+    def __repr__(self):
+        return f"<PipelineExecution(id={self.id}, type={self.execution_type}, status={self.status}, date={self.execution_date})>"

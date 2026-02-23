@@ -1,5 +1,5 @@
 # Docker Compose para Sistema de Ranking Quantitativo
-# Valida: Requisitos 13.3, 13.4, 13.5, 13.6, 13.7
+# Com PostgreSQL
 
 version: '3.8'
 
@@ -35,11 +35,8 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     environment:
-      # Database
+      # Database - PostgreSQL
       DATABASE_URL: postgresql://${POSTGRES_USER:-quant_user}:${POSTGRES_PASSWORD:-quant_password}@postgres:5432/${POSTGRES_DB:-quant_ranker}
-      
-      # API Keys
-      FMP_API_KEY: ${FMP_API_KEY}
       
       # Scoring Weights
       MOMENTUM_WEIGHT: ${MOMENTUM_WEIGHT:-0.4}

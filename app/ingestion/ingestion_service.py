@@ -287,13 +287,13 @@ class IngestionService:
             total_assets=balance.get("Total Assets"),
             total_debt=balance.get("Total Debt"),
             shareholders_equity=balance.get("Stockholders Equity"),
-            book_value_per_share=None,  # Calculado depois: shareholders_equity / shares
+            book_value_per_share=metrics.get("bookValuePerShare"),
             # Cash Flow - Campos corretos do Yahoo Finance
             operating_cash_flow=cash.get("Operating Cash Flow"),
             free_cash_flow=cash.get("Free Cash Flow"),
-            # Metrics - Calculados depois com preço atual
-            market_cap=None,
-            enterprise_value=None
+            # Metrics - Do Yahoo Finance info
+            market_cap=metrics.get("marketCap"),
+            enterprise_value=metrics.get("enterpriseValue")
         )
 
     def _update_fundamental_record(
@@ -323,10 +323,10 @@ class IngestionService:
         record.total_assets = balance.get("Total Assets")
         record.total_debt = balance.get("Total Debt")
         record.shareholders_equity = balance.get("Stockholders Equity")
-        record.book_value_per_share = None  # Calculado depois
+        record.book_value_per_share = metrics.get("bookValuePerShare")
         # Cash Flow - Campos corretos do Yahoo Finance
         record.operating_cash_flow = cash.get("Operating Cash Flow")
         record.free_cash_flow = cash.get("Free Cash Flow")
-        # Metrics - Calculados depois
-        record.market_cap = None
-        record.enterprise_value = None
+        # Metrics - Do Yahoo Finance info
+        record.market_cap = metrics.get("marketCap")
+        record.enterprise_value = metrics.get("enterpriseValue")

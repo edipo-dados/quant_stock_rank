@@ -32,6 +32,34 @@ st.title("📊 Detalhes do Ativo")
 API_URL = settings.backend_url
 
 
+def safe_format(value, format_str=".3f", default="N/A"):
+    """
+    Formata um valor de forma segura, tratando None e NaN.
+    
+    Args:
+        value: Valor a ser formatado
+        format_str: String de formatação (ex: ".3f", ".2f", ".0%")
+        default: Valor padrão se value for None ou NaN
+        
+    Returns:
+        str: Valor formatado ou default
+    """
+    if value is None:
+        return default
+    
+    try:
+        import math
+        if isinstance(value, (int, float)) and math.isnan(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    
+    try:
+        return f"{value:{format_str}}"
+    except (TypeError, ValueError):
+        return default
+
+
 def fetch_asset_detail(ticker, date=None):
     """
     Busca detalhes de um ativo da API.
@@ -65,7 +93,7 @@ def fetch_asset_detail(ticker, date=None):
 
 def fetch_price_history(ticker, days=365):
     """
-    Busca histórico de preços usando yfinance.
+    Busca histórico de preços da API do backend.
     
     Args:
         ticker: Símbolo do ativo
@@ -75,23 +103,43 @@ def fetch_price_history(ticker, days=365):
         pd.DataFrame: DataFrame com histórico de preços ou None
     """
     try:
-        import yfinance as yf
+        # Buscar da API do backend
+        url = f"{API_URL}/api/v1/prices/{ticker}"
+        params = {"days": days}
         
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
+        response = requests.get(url, params=params, timeout=10)
         
-        # Adicionar .SA para tickers brasileiros se necessário
-        ticker_yf = ticker if '.SA' in ticker else f"{ticker}.SA"
-        
-        stock = yf.Ticker(ticker_yf)
-        hist = stock.history(start=start_date, end=end_date)
-        
-        if hist.empty:
+        if response.status_code == 404:
             return None
         
-        return hist
+        response.raise_for_status()
+        data = response.json()
+        
+        # Converter para DataFrame
+        prices = data.get('prices', [])
+        if not prices:
+            return None
+        
+        df = pd.DataFrame(prices)
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        
+        # Renomear colunas para match com yfinance format
+        df.rename(columns={
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'close': 'Close',
+            'volume': 'Volume',
+            'adj_close': 'Adj Close'
+        }, inplace=True)
+        
+        return df
+        
+    except requests.exceptions.RequestException as e:
+        # Não mostrar erro, apenas retornar None silenciosamente
+        return None
     except Exception as e:
-        st.warning(f"Não foi possível carregar histórico de preços: {e}")
         return None
 
 
@@ -179,7 +227,7 @@ if ticker_input and (search_button or default_ticker):
         with col1:
             st.metric(
                 "Score Final",
-                f"{score['final_score']:.3f}",
+                safe_format(score.get('final_score'), ".3f"),
                 help="Score final ponderado"
             )
         
@@ -192,16 +240,17 @@ if ticker_input and (search_button or default_ticker):
             )
         
         with col3:
+            confidence = score.get('confidence')
             st.metric(
                 "Confiança",
-                f"{score['confidence']:.0%}",
+                safe_format(confidence, ".0%") if confidence is not None else "N/A",
                 help="Score de confiança (0-100%)"
             )
         
         with col4:
             st.metric(
                 "Data",
-                score['date'],
+                score.get('date', 'N/A'),
                 help="Data do score"
             )
         
@@ -247,14 +296,18 @@ if ticker_input and (search_button or default_ticker):
             with col1:
                 st.metric(
                     "Score Base",
-                    f"{base_score:.3f}",
+                    safe_format(base_score, ".3f"),
                     help="Score antes das penalidades de risco"
                 )
             with col2:
+                final_score = score.get('final_score')
+                delta_value = None
+                if final_score is not None and base_score is not None:
+                    delta_value = final_score - base_score
                 st.metric(
                     "Score Final",
-                    f"{score['final_score']:.3f}",
-                    delta=f"{score['final_score'] - base_score:.3f}",
+                    safe_format(final_score, ".3f"),
+                    delta=safe_format(delta_value, ".3f") if delta_value is not None else None,
                     help="Score após aplicação das penalidades de risco"
                 )
             st.divider()
@@ -264,32 +317,32 @@ if ticker_input and (search_button or default_ticker):
         with col1:
             st.metric(
                 "🚀 Momentum",
-                f"{score['momentum_score']:.3f}",
+                safe_format(score.get('momentum_score'), ".3f"),
                 help="Score de fatores de momentum (retornos, RSI, volatilidade)"
             )
         
         with col2:
             st.metric(
                 "⭐ Qualidade",
-                f"{score['quality_score']:.3f}",
+                safe_format(score.get('quality_score'), ".3f"),
                 help="Score de fatores de qualidade (ROE, margens, crescimento)"
             )
         
         with col3:
             st.metric(
                 "💰 Valor",
-                f"{score['value_score']:.3f}",
+                safe_format(score.get('value_score'), ".3f"),
                 help="Score de fatores de valor (P/L, P/VP, EV/EBITDA)"
             )
         
         # Gráfico de barras do breakdown
+        momentum_score = score.get('momentum_score', 0) or 0
+        quality_score = score.get('quality_score', 0) or 0
+        value_score = score.get('value_score', 0) or 0
+        
         breakdown_df = pd.DataFrame({
             'Categoria': ['Momentum', 'Qualidade', 'Valor'],
-            'Score': [
-                score['momentum_score'],
-                score['quality_score'],
-                score['value_score']
-            ]
+            'Score': [momentum_score, quality_score, value_score]
         })
         
         fig_breakdown = go.Figure(data=[
@@ -355,7 +408,7 @@ if ticker_input and (search_button or default_ticker):
                     for factor, value in momentum_factors.items():
                         st.metric(
                             factor.replace('_', ' ').title(),
-                            f"{value:.3f}"
+                            safe_format(value, ".3f")
                         )
             
             with col2:
@@ -364,7 +417,7 @@ if ticker_input and (search_button or default_ticker):
                     for factor, value in quality_factors.items():
                         st.metric(
                             factor.replace('_', ' ').title(),
-                            f"{value:.3f}"
+                            safe_format(value, ".3f")
                         )
             
             with col3:
@@ -373,7 +426,7 @@ if ticker_input and (search_button or default_ticker):
                     for factor, value in value_factors.items():
                         st.metric(
                             factor.replace('_', ' ').title(),
-                            f"{value:.3f}"
+                            safe_format(value, ".3f")
                         )
         
         st.divider()

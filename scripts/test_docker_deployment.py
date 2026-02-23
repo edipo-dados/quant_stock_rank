@@ -36,22 +36,22 @@ def print_header(text: str):
 
 def print_success(text: str):
     """Imprime mensagem de sucesso"""
-    print(f"{Colors.GREEN}✓ {text}{Colors.RESET}")
+    print(f"{Colors.GREEN}[OK] {text}{Colors.RESET}")
 
 
 def print_error(text: str):
     """Imprime mensagem de erro"""
-    print(f"{Colors.RED}✗ {text}{Colors.RESET}")
+    print(f"{Colors.RED}[ERRO] {text}{Colors.RESET}")
 
 
 def print_warning(text: str):
     """Imprime mensagem de aviso"""
-    print(f"{Colors.YELLOW}⚠ {text}{Colors.RESET}")
+    print(f"{Colors.YELLOW}[AVISO] {text}{Colors.RESET}")
 
 
 def print_info(text: str):
     """Imprime mensagem informativa"""
-    print(f"{Colors.BLUE}ℹ {text}{Colors.RESET}")
+    print(f"{Colors.BLUE}[INFO] {text}{Colors.RESET}")
 
 
 def check_docker_running() -> bool:
@@ -319,8 +319,8 @@ def main():
     print(f"Taxa de sucesso: {success_rate:.1f}%\n")
     
     if tests_passed == tests_total:
-        print_success("Todos os testes passaram! ✨")
-        print_info("\nServiços disponíveis:")
+        print_success("Todos os testes passaram!")
+        print_info("\nServicos disponiveis:")
         print_info("  - Backend API: http://localhost:8000")
         print_info("  - Frontend: http://localhost:8501")
         print_info("  - PostgreSQL: localhost:5432")

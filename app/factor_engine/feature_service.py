@@ -6,8 +6,9 @@ Valida: Requisitos 2.9, 3.7
 
 import logging
 from datetime import date
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 import pandas as pd
+import numpy as np
 
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,27 @@ from app.filters.eligibility_filter import EligibilityFilter
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+def convert_numpy_to_python(value: Any) -> Any:
+    """
+    Converte valores NumPy para tipos Python nativos.
+    
+    Args:
+        value: Valor a ser convertido
+    
+    Returns:
+        Valor convertido para tipo Python nativo
+    """
+    if value is None:
+        return None
+    if isinstance(value, (np.integer, np.floating)):
+        return float(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    return value
 
 
 class FeatureService:
@@ -65,6 +87,9 @@ class FeatureService:
         Valida: Requisito 3.7
         """
         try:
+            # Converter valores NumPy para Python nativos
+            features_converted = {k: convert_numpy_to_python(v) for k, v in features.items()}
+            
             # Verifica se registro já existe
             existing = self.db.query(FeatureDaily).filter_by(
                 ticker=ticker,
@@ -73,11 +98,11 @@ class FeatureService:
             
             if existing:
                 # Atualiza registro existente
-                existing.return_6m = features.get('return_6m')
-                existing.return_12m = features.get('return_12m')
-                existing.rsi_14 = features.get('rsi_14')
-                existing.volatility_90d = features.get('volatility_90d')
-                existing.recent_drawdown = features.get('recent_drawdown')
+                existing.return_6m = features_converted.get('return_6m')
+                existing.return_12m = features_converted.get('return_12m')
+                existing.rsi_14 = features_converted.get('rsi_14')
+                existing.volatility_90d = features_converted.get('volatility_90d')
+                existing.recent_drawdown = features_converted.get('recent_drawdown')
                 
                 logger.info(f"Updated daily features for {ticker} on {feature_date}")
                 record = existing
@@ -86,11 +111,11 @@ class FeatureService:
                 record = FeatureDaily(
                     ticker=ticker,
                     date=feature_date,
-                    return_6m=features.get('return_6m'),
-                    return_12m=features.get('return_12m'),
-                    rsi_14=features.get('rsi_14'),
-                    volatility_90d=features.get('volatility_90d'),
-                    recent_drawdown=features.get('recent_drawdown')
+                    return_6m=features_converted.get('return_6m'),
+                    return_12m=features_converted.get('return_12m'),
+                    rsi_14=features_converted.get('rsi_14'),
+                    volatility_90d=features_converted.get('volatility_90d'),
+                    recent_drawdown=features_converted.get('recent_drawdown')
                 )
                 self.db.add(record)
                 logger.info(f"Created daily features for {ticker} on {feature_date}")
@@ -130,6 +155,9 @@ class FeatureService:
         Valida: Requisito 2.9
         """
         try:
+            # Converter valores NumPy para Python nativos
+            features_converted = {k: convert_numpy_to_python(v) for k, v in features.items()}
+            
             # Verifica se registro já existe
             existing = self.db.query(FeatureMonthly).filter_by(
                 ticker=ticker,
@@ -138,18 +166,18 @@ class FeatureService:
             
             if existing:
                 # Atualiza registro existente
-                existing.roe = features.get('roe')
-                existing.net_margin = features.get('net_margin')
-                existing.revenue_growth_3y = features.get('revenue_growth_3y')
-                existing.debt_to_ebitda = features.get('debt_to_ebitda')
-                existing.pe_ratio = features.get('pe_ratio')
-                existing.ev_ebitda = features.get('ev_ebitda')
-                existing.pb_ratio = features.get('pb_ratio')
-                existing.roe_mean_3y = features.get('roe_mean_3y')
-                existing.roe_volatility = features.get('roe_volatility')
-                existing.debt_to_ebitda_raw = features.get('debt_to_ebitda_raw')
-                existing.net_income_last_year = features.get('net_income_last_year')
-                existing.net_income_history = features.get('net_income_history')
+                existing.roe = features_converted.get('roe')
+                existing.net_margin = features_converted.get('net_margin')
+                existing.revenue_growth_3y = features_converted.get('revenue_growth_3y')
+                existing.debt_to_ebitda = features_converted.get('debt_to_ebitda')
+                existing.pe_ratio = features_converted.get('pe_ratio')
+                existing.ev_ebitda = features_converted.get('ev_ebitda')
+                existing.pb_ratio = features_converted.get('pb_ratio')
+                existing.roe_mean_3y = features_converted.get('roe_mean_3y')
+                existing.roe_volatility = features_converted.get('roe_volatility')
+                existing.debt_to_ebitda_raw = features_converted.get('debt_to_ebitda_raw')
+                existing.net_income_last_year = features_converted.get('net_income_last_year')
+                existing.net_income_history = features_converted.get('net_income_history')
                 
                 logger.info(f"Updated monthly features for {ticker} on {month}")
                 record = existing
@@ -158,18 +186,18 @@ class FeatureService:
                 record = FeatureMonthly(
                     ticker=ticker,
                     month=month,
-                    roe=features.get('roe'),
-                    net_margin=features.get('net_margin'),
-                    revenue_growth_3y=features.get('revenue_growth_3y'),
-                    debt_to_ebitda=features.get('debt_to_ebitda'),
-                    pe_ratio=features.get('pe_ratio'),
-                    ev_ebitda=features.get('ev_ebitda'),
-                    pb_ratio=features.get('pb_ratio'),
-                    roe_mean_3y=features.get('roe_mean_3y'),
-                    roe_volatility=features.get('roe_volatility'),
-                    debt_to_ebitda_raw=features.get('debt_to_ebitda_raw'),
-                    net_income_last_year=features.get('net_income_last_year'),
-                    net_income_history=features.get('net_income_history')
+                    roe=features_converted.get('roe'),
+                    net_margin=features_converted.get('net_margin'),
+                    revenue_growth_3y=features_converted.get('revenue_growth_3y'),
+                    debt_to_ebitda=features_converted.get('debt_to_ebitda'),
+                    pe_ratio=features_converted.get('pe_ratio'),
+                    ev_ebitda=features_converted.get('ev_ebitda'),
+                    pb_ratio=features_converted.get('pb_ratio'),
+                    roe_mean_3y=features_converted.get('roe_mean_3y'),
+                    roe_volatility=features_converted.get('roe_volatility'),
+                    debt_to_ebitda_raw=features_converted.get('debt_to_ebitda_raw'),
+                    net_income_last_year=features_converted.get('net_income_last_year'),
+                    net_income_history=features_converted.get('net_income_history')
                 )
                 self.db.add(record)
                 logger.info(f"Created monthly features for {ticker} on {month}")

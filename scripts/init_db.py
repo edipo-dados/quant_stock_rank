@@ -21,9 +21,11 @@ from app.models.database import engine, Base
 from app.models.schemas import (
     RawPriceDaily,
     RawFundamental,
+    AssetInfo,
     FeatureDaily,
     FeatureMonthly,
-    ScoreDaily
+    ScoreDaily,
+    PipelineExecution
 )
 
 # Configuração de logging
@@ -63,14 +65,16 @@ def init_database():
         expected_tables = {
             'raw_prices_daily',
             'raw_fundamentals',
+            'asset_info',
             'features_daily',
             'features_monthly',
-            'scores_daily'
+            'scores_daily',
+            'pipeline_executions'
         }
         
         created_tables = set(tables)
         if expected_tables.issubset(created_tables):
-            logger.info("✓ Todas as tabelas esperadas foram criadas")
+            logger.info("[OK] Todas as tabelas esperadas foram criadas")
         else:
             missing = expected_tables - created_tables
             logger.warning(f"⚠ Tabelas faltando: {', '.join(missing)}")

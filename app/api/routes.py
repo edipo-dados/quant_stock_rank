@@ -23,7 +23,7 @@ from app.api.schemas import (
     ScoreBreakdown,
     ErrorResponse
 )
-from app.models.schemas import ScoreDaily, FeatureDaily, FeatureMonthly
+from app.models.schemas import ScoreDaily, FeatureDaily, FeatureMonthly, RawPriceDaily
 from app.scoring.scoring_engine import ScoreResult
 from app.scoring.ranker import RankingEntry
 from app.report.report_generator import ReportGenerator
@@ -416,3 +416,84 @@ async def get_top_assets(
         top_assets=top_breakdowns,
         n=n
     )
+
+
+@router.get(
+    "/prices/{ticker}",
+    summary="Obter histórico de preços",
+    description="Retorna o histórico de preços diários de um ativo do banco de dados.",
+    responses={
+        200: {"description": "Histórico de preços retornado com sucesso"},
+        404: {"model": ErrorResponse, "description": "Ticker não encontrado ou sem dados de preços"}
+    }
+)
+async def get_price_history(
+    ticker: str,
+    days: int = Query(
+        365,
+        ge=1,
+        le=3650,
+        description="Número de dias de histórico (padrão: 365, máximo: 3650)"
+    ),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna histórico de preços diários de um ativo.
+    
+    Busca os dados de preços do banco de dados (tabela raw_prices_daily).
+    Retorna os últimos N dias de dados disponíveis.
+    
+    Args:
+        ticker: Símbolo do ativo
+        days: Número de dias de histórico (padrão: 365)
+        db: Sessão do banco de dados
+        
+    Returns:
+        Lista de dicts com date, open, high, low, close, volume, adj_close
+        
+    Raises:
+        HTTPException 404: Se o ticker não for encontrado ou não tiver dados
+    """
+    from datetime import datetime, timedelta
+    
+    # Calcular data de início
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days)
+    
+    # Buscar preços do banco de dados
+    prices = db.query(RawPriceDaily).filter(
+        RawPriceDaily.ticker == ticker.upper(),
+        RawPriceDaily.date >= start_date,
+        RawPriceDaily.date <= end_date
+    ).order_by(RawPriceDaily.date).all()
+    
+    if not prices:
+        logger.warning(f"No price data found for ticker {ticker}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Nenhum dado de preço encontrado para o ticker {ticker}"
+        )
+    
+    # Converter para lista de dicts
+    price_data = [
+        {
+            "date": price.date.isoformat(),
+            "open": float(price.open),
+            "high": float(price.high),
+            "low": float(price.low),
+            "close": float(price.close),
+            "volume": int(price.volume),
+            "adj_close": float(price.adj_close)
+        }
+        for price in prices
+    ]
+    
+    logger.info(f"Returning {len(price_data)} price records for {ticker}")
+    
+    return {
+        "ticker": ticker.upper(),
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "count": len(price_data),
+        "prices": price_data
+    }

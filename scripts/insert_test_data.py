@@ -91,8 +91,8 @@ def insert_test_scores():
             db.add(score)
         
         db.commit()
-        print(f"✓ Inseridos {len(test_data)} scores de teste para {today}")
-        print("✓ Dados de teste prontos para visualização!")
+        print(f"[OK] Inseridos {len(test_data)} scores de teste para {today}")
+        print("[OK] Dados de teste prontos para visualizacao!")
         
     except Exception as e:
         db.rollback()
