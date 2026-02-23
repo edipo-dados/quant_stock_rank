@@ -53,43 +53,34 @@ Executado automaticamente quando:
 
 ## Como Usar
 
-### Opção 1: Scripts Batch (Recomendado)
+### Comando Principal
 
-#### Pipeline Automático (Detecção Inteligente)
+O pipeline agora usa um único script Docker otimizado:
+
 ```bash
-pipeline-auto.bat
-```
-Detecta automaticamente se deve fazer FULL ou INCREMENTAL.
+# Modo automático (detecta FULL ou INCREMENTAL)
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200"
 
-#### Pipeline Incremental
-```bash
-pipeline-incremental.bat
-```
-Força modo incremental (mas faz FULL se necessário).
+# Forçar modo FULL
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200 --force-full"
 
-#### Pipeline Full
-```bash
-pipeline-full.bat
-```
-Força modo FULL sempre.
-
-### Opção 2: Linha de Comando
-
-#### Modo Automático (Recomendado)
-```bash
-# Teste (5 ativos)
-docker-compose exec backend python scripts/run_pipeline_smart.py --mode test
-
-# Top 50 líquidos
-docker-compose exec backend python scripts/run_pipeline_smart.py --mode liquid --limit 50
-
-# Tickers customizados
-docker-compose exec backend python scripts/run_pipeline_smart.py --mode manual --tickers PETR4.SA VALE3.SA ITUB4.SA
+# Modo teste (5 ativos)
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode test"
 ```
 
-#### Forçar FULL
+### Scripts Batch Windows (Atalhos)
+
+Para facilitar no Windows, use os scripts batch:
+
 ```bash
-docker-compose exec backend python scripts/run_pipeline_smart.py --mode test --force-full
+# Executar pipeline com detecção automática
+docker-pipeline.bat
+
+# Iniciar todos os containers
+docker-start.bat
+
+# Parar todos os containers
+docker-stop.bat
 ```
 
 ## Tabela de Controle
@@ -132,7 +123,7 @@ CREATE TABLE pipeline_executions (
 
 ### Ver Resumo de Todas as Execuções
 ```bash
-docker-compose exec backend python scripts/check_pipeline_history.py
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/check_pipeline_history.py"
 ```
 
 Saída:
@@ -149,68 +140,30 @@ Total de execuções: 15
 Última execução bem-sucedida:
   Data: 22/02/2026 14:30:15
   Tipo: INCREMENTAL
-  Tickers: 50
+  Tickers: 63
   Período: 2026-02-21 a 2026-02-22
 
 ID    Data/Hora            Tipo         Modo       Status     Tickers  Duração
 --------------------------------------------------------------------------------
-15    22/02/2026 14:30     INCREMENTAL  liquid     SUCCESS    50       5.2min
-14    21/02/2026 18:45     INCREMENTAL  liquid     SUCCESS    50       4.8min
-13    20/02/2026 19:00     FULL         liquid     SUCCESS    50       18.3min
+15    22/02/2026 14:30     INCREMENTAL  liquid     SUCCESS    63       5.2min
+14    21/02/2026 18:45     INCREMENTAL  liquid     SUCCESS    63       4.8min
+13    20/02/2026 19:00     FULL         liquid     SUCCESS    63       30.3min
 ...
 ```
 
 ### Ver Detalhes de uma Execução Específica
 ```bash
-docker-compose exec backend python scripts/check_pipeline_history.py --id 15
-```
-
-Saída:
-```
-================================================================================
-EXECUÇÃO #15
-================================================================================
-
-Data/Hora: 22/02/2026 14:30:15
-Tipo: INCREMENTAL
-Modo: liquid
-Status: SUCCESS
-Duração: 5.2min
-Período: 2026-02-21 a 2026-02-22
-
-Estatísticas:
-  Tickers processados: 50
-  Tickers sucesso: 48
-  Tickers falha: 2
-  Preços ingeridos: 150
-  Fundamentos ingeridos: 0
-  Features calculadas: 48
-  Scores calculados: 48
-
-Tickers (50):
-  PETR4.SA, VALE3.SA, ITUB4.SA, BBDC4.SA, ABEV3.SA, ...
-
-Configuração:
-  momentum_weight: 0.4
-  quality_weight: 0.3
-  value_weight: 0.3
-  sleep_between_tickers: 2
-  sleep_between_batches: 5
-  batch_size: 5
-
-Erros (2):
-  1. MGLU3.SA - prices: No data
-  2. AMER3.SA - fundamentals: API timeout
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/check_pipeline_history.py --id 15"
 ```
 
 ### Ver Última Execução
 ```bash
-docker-compose exec backend python scripts/check_pipeline_history.py --last
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/check_pipeline_history.py --last"
 ```
 
 ### Ver Última Execução Bem-Sucedida
 ```bash
-docker-compose exec backend python scripts/check_pipeline_history.py --last-success
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/check_pipeline_history.py --last-success"
 ```
 
 ## Lógica de Detecção
@@ -256,16 +209,22 @@ def determine_execution_type(db: Session, force_full: bool = False):
 
 ### Ajustar Thresholds
 
-Edite `scripts/run_pipeline_smart.py`:
+Edite `scripts/run_pipeline_docker.py`:
 
 ```python
 # Configurações de detecção de modo
-FULL_THRESHOLD_DAYS = 7  # Se dados > 7 dias, executa FULL
-INCREMENTAL_LOOKBACK_DAYS = 7  # Busca últimos 7 dias no incremental
-FULL_LOOKBACK_DAYS = 400  # Busca 400 dias no full
+# Função: check_if_full_run_needed()
+# Se dados > 7 dias, executa FULL
+# Se dados <= 7 dias, executa INCREMENTAL
+
+# Lookback days
+lookback_days = 400  # FULL: busca 400 dias
+lookback_days = 7    # INCREMENTAL: busca 7 dias
 ```
 
 ### Ajustar Rate Limiting
+
+Edite `scripts/run_pipeline_docker.py`:
 
 ```python
 # Configurações de rate limiting
@@ -282,19 +241,24 @@ MAX_RETRIES = 3  # tentativas máximas por ticker
 Execute o pipeline automático todos os dias após o fechamento do mercado:
 
 ```bash
-# Agendar para 19h (após fechamento)
-pipeline-auto.bat
+docker-pipeline.bat
+```
+
+Ou diretamente:
+
+```bash
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200"
 ```
 
 **Comportamento:**
-- Segunda execução: FULL (400 dias)
-- Terça a Sexta: INCREMENTAL (apenas novos dados)
-- Segunda seguinte: INCREMENTAL (se executou na sexta)
+- Primeira execução: FULL (400 dias)
+- Execuções seguintes (≤7 dias): INCREMENTAL (apenas novos dados)
+- Após 7+ dias sem executar: FULL novamente
 
 ### Primeira Execução
 
 ```bash
-pipeline-full.bat
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200 --force-full"
 ```
 
 Busca todo o histórico necessário (400 dias).
@@ -302,7 +266,7 @@ Busca todo o histórico necessário (400 dias).
 ### Reprocessar Tudo
 
 ```bash
-pipeline-full.bat
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200 --force-full"
 ```
 
 Força reprocessamento completo, útil quando:
@@ -310,16 +274,16 @@ Força reprocessamento completo, útil quando:
 - Corrigiu bug no cálculo
 - Quer garantir consistência
 
-### Atualização Rápida
+### Atualização Rápida (Teste)
 
 ```bash
-pipeline-incremental.bat
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode test"
 ```
 
-Atualiza apenas dados novos, útil para:
-- Múltiplas atualizações no mesmo dia
-- Testes rápidos
-- Verificar novos dados
+Testa com apenas 5 ativos, útil para:
+- Verificar se pipeline está funcionando
+- Testar mudanças no código
+- Debug rápido
 
 ## Monitoramento
 
@@ -327,14 +291,17 @@ Atualiza apenas dados novos, útil para:
 
 Logs são salvos em:
 - Console (stdout)
-- Arquivo: `pipeline_smart.log`
+- Arquivo: `pipeline_docker.log` (dentro do container)
 
 ```bash
 # Ver logs em tempo real
-docker-compose exec backend tail -f pipeline_smart.log
+docker logs quant-ranker-backend -f
 
 # Ver últimas 100 linhas
-docker-compose exec backend tail -n 100 pipeline_smart.log
+docker logs quant-ranker-backend --tail 100
+
+# Ver logs do arquivo dentro do container
+docker exec quant-ranker-backend bash -c "tail -f /app/pipeline_docker.log"
 ```
 
 ### Métricas
@@ -383,10 +350,16 @@ WHERE status = 'RUNNING';
 
 **Causa**: Rate limiting insuficiente.
 
-**Solução**: Aumente delays em `run_pipeline_smart.py`:
+**Solução**: Aumente delays em `run_pipeline_docker.py`:
 ```python
 SLEEP_BETWEEN_TICKERS = 5  # Aumentar de 2 para 5
 SLEEP_BETWEEN_BATCHES = 10 # Aumentar de 5 para 10
+```
+
+Depois reconstrua o container:
+```bash
+docker-compose build backend
+docker restart quant-ranker-backend
 ```
 
 ### Dados duplicados
@@ -397,36 +370,47 @@ SLEEP_BETWEEN_BATCHES = 10 # Aumentar de 5 para 10
 
 ## Migração do Pipeline Antigo
 
-### Passo 1: Criar Nova Tabela
+Se você estava usando scripts antigos, agora use apenas:
+
+### Passo 1: Iniciar Containers
 
 ```bash
-docker-compose exec backend python scripts/init_db.py
+docker-start.bat
+# ou
+docker-compose up -d
 ```
 
 ### Passo 2: Executar Primeira Carga
 
 ```bash
-pipeline-full.bat
+docker-pipeline.bat
+# ou
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200 --force-full"
 ```
 
-### Passo 3: Usar Pipeline Inteligente
+### Passo 3: Usar Pipeline Diariamente
 
 A partir de agora, use:
 ```bash
-pipeline-auto.bat  # Diariamente
+docker-pipeline.bat  # Diariamente
 ```
+
+O sistema detecta automaticamente se precisa FULL ou INCREMENTAL.
 
 ## Comparação com Pipeline Antigo
 
-| Característica | Pipeline Antigo | Pipeline Inteligente |
-|----------------|-----------------|---------------------|
+| Característica | Pipeline Antigo | Pipeline Atual (Docker) |
+|----------------|-----------------|-------------------------|
 | Detecção de modo | Manual | Automática |
 | Rastreamento | Não | Sim (banco de dados) |
 | Histórico | Não | Sim (completo) |
 | Estatísticas | Logs apenas | Banco + Logs |
 | Incremental | Não | Sim |
 | Otimização | Não | Sim (apenas novos dados) |
-| Tempo (50 ativos) | 20 min sempre | 20 min (FULL) / 5 min (INC) |
+| Tempo (63 ativos) | 30 min sempre | 30 min (FULL) / 5-10 min (INC) |
+| Rate Limiting | Básico | Avançado (batch + retry) |
+| Conversão Tipos | Não | Sim (NumPy → Python) |
+| Tratamento Erros | Básico | Completo (None/NaN) |
 
 ## Próximos Passos
 
