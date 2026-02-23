@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.1.0] - 2026-02-23
+
+### ✨ Adicionado
+- Chat com IA usando Gemini 2.5 Flash para análise conversacional de ações
+- Busca web integrada (DuckDuckGo) para notícias e informações externas
+- Funções de contexto de mercado (Ibovespa, USD/BRL, Selic)
+- Informações detalhadas de empresas via yfinance
+- Chat Assistente como primeira página do aplicativo
+
+### 🐛 Corrigido
+- Serialização de valores NaN/Infinity em respostas JSON para Gemini API
+- Migração completa para biblioteca google-genai (nova API)
+- Imports circulares entre gemini_adapter e routes
+- Conexão entre containers Docker (frontend → backend)
+
+### 🔄 Alterado
+- Reorganizada estrutura de documentação (tudo em docs/)
+- README.md mais conciso e direto
+- Removidos 5 arquivos de documentação duplicada
+- Documentação consolidada e organizada
+
+### 📚 Documentação
+- Movido CHAT_GEMINI.md para docs/
+- Movido MCP_SERVER.md para docs/
+- Renomeado APLICACAO_DOCKER_COMPLETA.md para docs/DOCKER.md
+- Removidos: LEIA-ME-PRIMEIRO.md, DOCKER_QUICKSTART.md, DOCKER_PIPELINE_RATE_LIMITING.md, COMO_USAR_DOCKER.md, ESTRUTURA_DADOS_E_CALCULOS_RANKING.md
+
 ## [2.0.0] - 2026-02-22
 
 ### ✨ Adicionado

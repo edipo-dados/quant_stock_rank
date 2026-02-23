@@ -18,9 +18,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Instalar dependências Python
-RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic pydantic-settings \
-    sqlalchemy alembic pandas numpy yfinance requests pytest pytest-asyncio \
-    hypothesis streamlit plotly python-dotenv python-multipart psycopg2-binary
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar código da aplicação
 COPY app/ ./app/
@@ -42,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
 # Script de inicialização
-CMD ["sh", "-c", "sleep 5 && python scripts/init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "sleep 5 && python scripts/init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --timeout-keep-alive 75"]

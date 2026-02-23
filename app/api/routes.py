@@ -9,7 +9,7 @@ Valida: Requisitos 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from datetime import date as date_type
+from datetime import date as date_type, datetime
 from typing import Optional
 import logging
 
@@ -27,10 +27,15 @@ from app.models.schemas import ScoreDaily, FeatureDaily, FeatureMonthly, RawPric
 from app.scoring.scoring_engine import ScoreResult
 from app.scoring.ranker import RankingEntry
 from app.report.report_generator import ReportGenerator
+from app.chat.gemini_adapter import GeminiChatAdapter
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Cache de sessões de chat (em produção, usar Redis ou similar)
+chat_sessions = {}
 
 
 def _get_latest_date(db: Session) -> Optional[date_type]:
@@ -496,4 +501,115 @@ async def get_price_history(
         "end_date": end_date.isoformat(),
         "count": len(price_data),
         "prices": price_data
+    }
+
+
+
+@router.post(
+    "/chat/message",
+    summary="Enviar mensagem para o assistente de chat",
+    description="Envia uma mensagem para o assistente conversacional e recebe uma resposta.",
+)
+async def chat_message(
+    message: str = Query(..., description="Mensagem do usuário"),
+    session_id: str = Query("default", description="ID da sessão de chat"),
+    gemini_api_key: str = Query(..., description="API key do Google Gemini"),
+    db: Session = Depends(get_db)
+):
+    """
+    Envia uma mensagem para o assistente de chat.
+    
+    O assistente tem acesso a todas as ferramentas do sistema de ranking
+    e pode responder perguntas sobre ações, fazer análises e comparações.
+    
+    Args:
+        message: Mensagem do usuário
+        session_id: ID da sessão (para manter contexto)
+        gemini_api_key: API key do Google Gemini
+        db: Sessão do banco de dados
+        
+    Returns:
+        Resposta do assistente
+    """
+    try:
+        # Obter ou criar sessão de chat
+        if session_id not in chat_sessions:
+            chat_sessions[session_id] = GeminiChatAdapter(gemini_api_key, db)
+            chat_sessions[session_id].start_chat()
+        
+        chat = chat_sessions[session_id]
+        
+        # Enviar mensagem e obter resposta
+        response = await chat.send_message(message)
+        
+        return {
+            "session_id": session_id,
+            "message": message,
+            "response": response,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error in chat_message: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao processar mensagem: {str(e)}"
+        )
+
+
+@router.get(
+    "/chat/history",
+    summary="Obter histórico de chat",
+    description="Retorna o histórico completo de uma sessão de chat.",
+)
+async def chat_history(
+    session_id: str = Query("default", description="ID da sessão de chat")
+):
+    """
+    Obtém o histórico de uma sessão de chat.
+    
+    Args:
+        session_id: ID da sessão
+        
+    Returns:
+        Lista de mensagens da sessão
+    """
+    if session_id not in chat_sessions:
+        return {
+            "session_id": session_id,
+            "history": []
+        }
+    
+    chat = chat_sessions[session_id]
+    history = chat.get_history()
+    
+    return {
+        "session_id": session_id,
+        "history": history
+    }
+
+
+@router.delete(
+    "/chat/session",
+    summary="Limpar sessão de chat",
+    description="Remove uma sessão de chat e seu histórico.",
+)
+async def clear_chat_session(
+    session_id: str = Query("default", description="ID da sessão de chat")
+):
+    """
+    Limpa uma sessão de chat.
+    
+    Args:
+        session_id: ID da sessão
+        
+    Returns:
+        Confirmação
+    """
+    if session_id in chat_sessions:
+        del chat_sessions[session_id]
+    
+    return {
+        "session_id": session_id,
+        "status": "cleared"
     }
