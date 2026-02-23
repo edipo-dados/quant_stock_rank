@@ -210,6 +210,90 @@ class GeminiChatAdapter:
                             type=types.Type.OBJECT,
                             properties={}
                         )
+                    ),
+                    types.FunctionDeclaration(
+                        name="search_statusinvest",
+                        description="Busca informações sobre uma ação no Status Invest (indicadores fundamentalistas, variação, índices). Retorna link direto e resumo.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={
+                                "ticker": types.Schema(
+                                    type=types.Type.STRING,
+                                    description="Símbolo do ativo sem .SA (ex: PETR4, VALE3, ITUB4)"
+                                )
+                            },
+                            required=["ticker"]
+                        )
+                    ),
+                    types.FunctionDeclaration(
+                        name="search_investidor10",
+                        description="Busca informações sobre uma ação no Investidor10 (resultados, dividendos, cotação, indicadores). Retorna link direto e resumo.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={
+                                "ticker": types.Schema(
+                                    type=types.Type.STRING,
+                                    description="Símbolo do ativo sem .SA (ex: PETR4, VALE3, ITUB4)"
+                                )
+                            },
+                            required=["ticker"]
+                        )
+                    ),
+                    types.FunctionDeclaration(
+                        name="search_infomoney",
+                        description="Busca informações sobre uma ação no InfoMoney (gráficos, cotações, dividendos, análises). Retorna link direto e resumo.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={
+                                "ticker": types.Schema(
+                                    type=types.Type.STRING,
+                                    description="Símbolo do ativo sem .SA (ex: PETR4, VALE3, ITUB4)"
+                                )
+                            },
+                            required=["ticker"]
+                        )
+                    ),
+                    types.FunctionDeclaration(
+                        name="search_investing_com",
+                        description="Busca informações sobre uma ação no Investing.com (cotação em tempo real, gráficos, análises). Retorna link direto.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={
+                                "ticker": types.Schema(
+                                    type=types.Type.STRING,
+                                    description="Símbolo do ativo sem .SA (ex: PETR4, VALE3, ITUB4)"
+                                )
+                            },
+                            required=["ticker"]
+                        )
+                    ),
+                    types.FunctionDeclaration(
+                        name="search_google_finance",
+                        description="Busca informações sobre uma ação no Google Finance (cotação em tempo real, histórico). Retorna link direto.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={
+                                "ticker": types.Schema(
+                                    type=types.Type.STRING,
+                                    description="Símbolo do ativo (ex: PETR4, VALE3, ITUB4)"
+                                )
+                            },
+                            required=["ticker"]
+                        )
+                    ),
+                    types.FunctionDeclaration(
+                        name="get_all_sources",
+                        description="Obtém links para todas as fontes de informação (Status Invest, Investidor10, InfoMoney, Investing.com, Google Finance) de uma ação.",
+                        parameters=types.Schema(
+                            type=types.Type.OBJECT,
+                            properties={
+                                "ticker": types.Schema(
+                                    type=types.Type.STRING,
+                                    description="Símbolo do ativo sem .SA (ex: PETR4, VALE3, ITUB4)"
+                                )
+                            },
+                            required=["ticker"]
+                        )
                     )
                 ]
             )
@@ -471,6 +555,189 @@ class GeminiChatAdapter:
                 except Exception as e:
                     return {"error": f"Erro ao buscar contexto de mercado: {str(e)}"}
             
+            elif function_name == "search_statusinvest":
+                ticker = args["ticker"].upper().replace(".SA", "")
+                
+                # Construir URL do Status Invest
+                url = f"https://statusinvest.com.br/acoes/{ticker.lower()}"
+                
+                # Fazer busca web sobre a ação no Status Invest
+                search_query = f"site:statusinvest.com.br {ticker} indicadores fundamentalistas"
+                
+                try:
+                    from duckduckgo_search import DDGS
+                    
+                    results = []
+                    with DDGS() as ddgs:
+                        search_results = list(ddgs.text(search_query, max_results=3))
+                        
+                        for r in search_results:
+                            results.append({
+                                "title": r.get("title", ""),
+                                "snippet": r.get("body", ""),
+                                "url": r.get("href", "")
+                            })
+                    
+                    return {
+                        "ticker": ticker,
+                        "source": "Status Invest",
+                        "direct_link": url,
+                        "description": "Indicadores fundamentalistas, variação e índices detalhados",
+                        "search_results": results,
+                        "recommendation": f"Acesse {url} para ver indicadores completos, DY, P/L, ROE, margem líquida e muito mais"
+                    }
+                except Exception as e:
+                    return {
+                        "ticker": ticker,
+                        "source": "Status Invest",
+                        "direct_link": url,
+                        "description": "Indicadores fundamentalistas, variação e índices detalhados",
+                        "recommendation": f"Acesse {url} para ver indicadores completos"
+                    }
+            
+            elif function_name == "search_investidor10":
+                ticker = args["ticker"].upper().replace(".SA", "")
+                
+                # Construir URL do Investidor10
+                url = f"https://investidor10.com.br/acoes/{ticker.lower()}"
+                
+                # Fazer busca web
+                search_query = f"site:investidor10.com.br {ticker} dividendos resultados"
+                
+                try:
+                    from duckduckgo_search import DDGS
+                    
+                    results = []
+                    with DDGS() as ddgs:
+                        search_results = list(ddgs.text(search_query, max_results=3))
+                        
+                        for r in search_results:
+                            results.append({
+                                "title": r.get("title", ""),
+                                "snippet": r.get("body", ""),
+                                "url": r.get("href", "")
+                            })
+                    
+                    return {
+                        "ticker": ticker,
+                        "source": "Investidor10",
+                        "direct_link": url,
+                        "description": "Resultados, dividendos, cotação e indicadores fundamentalistas",
+                        "search_results": results,
+                        "recommendation": f"Acesse {url} para ver histórico de dividendos, resultados trimestrais e análise completa"
+                    }
+                except Exception as e:
+                    return {
+                        "ticker": ticker,
+                        "source": "Investidor10",
+                        "direct_link": url,
+                        "description": "Resultados, dividendos, cotação e indicadores fundamentalistas",
+                        "recommendation": f"Acesse {url} para ver informações completas"
+                    }
+            
+            elif function_name == "search_infomoney":
+                ticker = args["ticker"].upper().replace(".SA", "")
+                
+                # Construir URL do InfoMoney
+                url = f"https://www.infomoney.com.br/cotacoes/b3/acao/{ticker.lower()}"
+                
+                # Fazer busca web
+                search_query = f"site:infomoney.com.br {ticker} cotação análise"
+                
+                try:
+                    from duckduckgo_search import DDGS
+                    
+                    results = []
+                    with DDGS() as ddgs:
+                        search_results = list(ddgs.text(search_query, max_results=3))
+                        
+                        for r in search_results:
+                            results.append({
+                                "title": r.get("title", ""),
+                                "snippet": r.get("body", ""),
+                                "url": r.get("href", "")
+                            })
+                    
+                    return {
+                        "ticker": ticker,
+                        "source": "InfoMoney",
+                        "direct_link": url,
+                        "description": "Gráficos, cotações, dividendos, resultados e análises",
+                        "search_results": results,
+                        "recommendation": f"Acesse {url} para ver gráficos interativos, notícias e análises de especialistas"
+                    }
+                except Exception as e:
+                    return {
+                        "ticker": ticker,
+                        "source": "InfoMoney",
+                        "direct_link": url,
+                        "description": "Gráficos, cotações, dividendos, resultados e análises",
+                        "recommendation": f"Acesse {url} para ver informações completas"
+                    }
+            
+            elif function_name == "search_investing_com":
+                ticker = args["ticker"].upper().replace(".SA", "")
+                
+                # Construir URL do Investing.com (formato brasileiro)
+                url = f"https://br.investing.com/equities/{ticker.lower()}"
+                
+                return {
+                    "ticker": ticker,
+                    "source": "Investing.com",
+                    "direct_link": url,
+                    "description": "Cotação em tempo real, gráficos avançados e análises técnicas",
+                    "recommendation": f"Acesse {url} para acompanhar cotação em tempo real e análises técnicas"
+                }
+            
+            elif function_name == "search_google_finance":
+                ticker = args["ticker"].upper().replace(".SA", "")
+                
+                # Construir URL do Google Finance
+                url = f"https://www.google.com/finance/quote/{ticker}:BVMF"
+                
+                return {
+                    "ticker": ticker,
+                    "source": "Google Finance",
+                    "direct_link": url,
+                    "description": "Cotação em tempo real e histórico de performance",
+                    "recommendation": f"Acesse {url} para ver cotação em tempo real e gráfico histórico"
+                }
+            
+            elif function_name == "get_all_sources":
+                ticker = args["ticker"].upper().replace(".SA", "")
+                
+                return {
+                    "ticker": ticker,
+                    "sources": {
+                        "status_invest": {
+                            "name": "Status Invest",
+                            "url": f"https://statusinvest.com.br/acoes/{ticker.lower()}",
+                            "description": "Indicadores fundamentalistas, variação e índices detalhados"
+                        },
+                        "investidor10": {
+                            "name": "Investidor10",
+                            "url": f"https://investidor10.com.br/acoes/{ticker.lower()}",
+                            "description": "Resultados, dividendos, cotação e indicadores"
+                        },
+                        "infomoney": {
+                            "name": "InfoMoney",
+                            "url": f"https://www.infomoney.com.br/cotacoes/b3/acao/{ticker.lower()}",
+                            "description": "Gráficos, cotações, dividendos e análises"
+                        },
+                        "investing_com": {
+                            "name": "Investing.com",
+                            "url": f"https://br.investing.com/equities/{ticker.lower()}",
+                            "description": "Cotação em tempo real e análises técnicas"
+                        },
+                        "google_finance": {
+                            "name": "Google Finance",
+                            "url": f"https://www.google.com/finance/quote/{ticker}:BVMF",
+                            "description": "Cotação em tempo real e histórico"
+                        }
+                    },
+                    "recommendation": "Consulte múltiplas fontes para uma análise completa e comparativa"
+                }
+            
             else:
                 return {"error": f"Unknown function: {function_name}"}
         
@@ -498,16 +765,24 @@ Além disso, você pode:
 - Obter contexto do mercado (Ibovespa, dólar, Selic)
 - Fazer buscas na web sobre notícias, análises e opiniões de especialistas
 - Buscar notícias específicas sobre empresas
+- Consultar fontes especializadas brasileiras:
+  * Status Invest: Indicadores fundamentalistas, variação e índices
+  * Investidor10: Resultados, dividendos, cotação e indicadores
+  * InfoMoney: Gráficos, cotações, dividendos e análises
+  * Investing.com: Cotação em tempo real e análises técnicas
+  * Google Finance: Cotação em tempo real e histórico
 
 Quando o usuário perguntar sobre investimentos:
-1. Use as ferramentas disponíveis para buscar dados reais
+1. Use as ferramentas disponíveis para buscar dados reais do sistema de ranking
 2. Combine análise quantitativa (scores) com contexto qualitativo (setor, mercado)
-3. Use web_search para buscar notícias recentes, análises de especialistas e contexto atual
-4. Considere o contexto macroeconômico atual
-5. Forneça análises claras e objetivas baseadas em dados reais
-6. Explique os scores em linguagem simples
-7. Cite as fontes quando usar informações da web
-8. SEMPRE mencione que não é recomendação de investimento e que o usuário deve consultar um profissional
+3. Use web_search para buscar notícias recentes e análises de especialistas
+4. Quando apropriado, forneça links para fontes especializadas (Status Invest, Investidor10, etc)
+5. Use get_all_sources para mostrar todas as fontes disponíveis de uma ação
+6. Considere o contexto macroeconômico atual
+7. Forneça análises claras e objetivas baseadas em dados reais
+8. Explique os scores em linguagem simples
+9. Cite as fontes quando usar informações da web
+10. SEMPRE mencione que não é recomendação de investimento e que o usuário deve consultar um profissional
 
 Seja conversacional, amigável, educativo e baseie suas respostas em dados reais."""
         

@@ -1,6 +1,6 @@
 # Chat com Gemini - Assistente Conversacional
 
-Interface conversacional para análise de ações brasileiras usando Google Gemini AI.
+Interface conversacional para análise de ações brasileiras usando Google Gemini 2.5 Flash.
 
 ## 🎯 Visão Geral
 
@@ -12,6 +12,13 @@ O Chat Assistente permite que você converse naturalmente sobre ações brasilei
 - Analisar histórico de preços
 - Explicar scores e rankings
 - Fornecer insights baseados em dados
+- **Buscar notícias e informações externas na web**
+- **Consultar fontes especializadas brasileiras:**
+  - Status Invest (indicadores fundamentalistas)
+  - Investidor10 (dividendos e resultados)
+  - InfoMoney (análises e gráficos)
+  - Investing.com (cotação em tempo real)
+  - Google Finance (histórico de performance)
 
 ## 🚀 Como Usar
 
@@ -33,7 +40,7 @@ docker-compose up -d
 
 2. Acesse o frontend: http://localhost:8501
 
-3. Navegue para a página "💬 Chat Assistente"
+3. Navegue para a página "💬 Chat Assistente" (primeira página)
 
 4. Cole sua API Key do Gemini na barra lateral
 
@@ -197,6 +204,53 @@ O Gemini usa "function calling" para acessar as ferramentas:
 - Você pode fazer perguntas de follow-up
 - Contexto é mantido até limpar o chat
 
+### Consulta a Fontes Externas
+
+```
+Você: Quero mais informações sobre PETR4
+
+Assistente: Vou buscar informações em múltiplas fontes...
+
+Aqui estão os links para análise completa de PETR4:
+
+📊 Status Invest: https://statusinvest.com.br/acoes/petr4
+   → Indicadores fundamentalistas, DY, P/L, ROE, margem líquida
+
+💰 Investidor10: https://investidor10.com.br/acoes/petr4
+   → Histórico de dividendos, resultados trimestrais
+
+📈 InfoMoney: https://www.infomoney.com.br/cotacoes/b3/acao/petr4
+   → Gráficos interativos, notícias e análises
+
+⏱️ Investing.com: https://br.investing.com/equities/petr4
+   → Cotação em tempo real e análises técnicas
+
+🔍 Google Finance: https://www.google.com/finance/quote/PETR4:BVMF
+   → Cotação em tempo real e histórico
+
+Recomendo consultar múltiplas fontes para uma análise completa!
+```
+
+### Busca de Notícias
+
+```
+Você: Tem alguma notícia recente sobre PRIO3?
+
+Assistente: Vou buscar notícias recentes sobre PRIO3...
+
+Encontrei 5 notícias recentes:
+
+1. "PRIO anuncia novo projeto de exploração no pré-sal"
+   Fonte: InfoMoney
+   Link: [...]
+
+2. "Ações da PRIO sobem 5% após resultados do 4T"
+   Fonte: Valor Econômico
+   Link: [...]
+
+[...]
+```
+
 ## ⚙️ Configuração
 
 ### Variáveis de Ambiente
@@ -219,7 +273,7 @@ Gemini Free Tier:
 O timeout padrão é 60 segundos. Para ajustar:
 
 ```python
-# Em frontend/pages/3_💬_Chat_Assistente.py
+# Em frontend/pages/1_💬_Chat_Assistente.py
 response = requests.post(..., timeout=120)  # 2 minutos
 ```
 
