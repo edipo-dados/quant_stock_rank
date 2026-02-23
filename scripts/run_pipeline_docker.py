@@ -11,6 +11,7 @@ Características:
 import logging
 import sys
 import time
+import pandas as pd
 from datetime import date, datetime, timedelta
 from typing import List, Dict
 from pathlib import Path
@@ -390,6 +391,9 @@ def run_pipeline_docker(
     
     db = SessionLocal()
     
+    # Import schemas at the beginning to avoid shadowing issues
+    from app.models.schemas import RawPriceDaily, RawFundamental
+    
     try:
         # Verificar se precisa executar full ou incremental
         is_full = force_full or check_if_full_run_needed(db)
@@ -458,18 +462,10 @@ def run_pipeline_docker(
             fundamentals_ingested=fundamental_results['total_records']
         )
         
-        # ETAPA 3: Processar features e scores (usar pipeline original)
+        # ETAPA 3: Processar features e scores
         logger.info("\n" + "=" * 80)
         logger.info("ETAPA 3: PROCESSAMENTO DE FEATURES E SCORES")
         logger.info("=" * 80)
-        
-        from scripts.run_pipeline import (
-            calculate_momentum_features,
-            calculate_fundamental_features,
-            normalize_features,
-            calculate_scores,
-            generate_ranking
-        )
         
         # Filtro de elegibilidade
         feature_service = FeatureService(db)
@@ -479,18 +475,174 @@ def run_pipeline_docker(
         
         logger.info(f"Elegibilidade: {len(eligible_tickers)} elegíveis, {len(exclusion_reasons)} excluídos")
         
-        # Calcular features
-        momentum_stats = calculate_momentum_features(db, eligible_tickers, date.today())
-        fundamental_stats = calculate_fundamental_features(db, eligible_tickers, date.today())
+        # Calcular features de momentum
+        logger.info("Calculando features de momentum...")
+        momentum_calculator = MomentumFactorCalculator()
+        momentum_factors_dict = {}
         
-        # Normalizar
-        normalize_features(db, date.today())
+        for ticker in eligible_tickers:
+            try:
+                # Buscar preços do banco
+                prices_query = db.query(RawPriceDaily).filter(
+                    RawPriceDaily.ticker == ticker
+                ).order_by(RawPriceDaily.date).all()
+                
+                if not prices_query:
+                    logger.warning(f"Sem preços para {ticker}")
+                    continue
+                
+                # Converter para DataFrame
+                prices_df = pd.DataFrame([{
+                    'date': p.date,
+                    'close': p.close,
+                    'adj_close': p.adj_close
+                } for p in prices_query])
+                
+                # Calcular fatores
+                factors = momentum_calculator.calculate_all_factors(ticker, prices_df)
+                momentum_factors_dict[ticker] = factors
+                
+            except Exception as e:
+                logger.warning(f"Erro ao calcular momentum para {ticker}: {e}")
+        
+        logger.info(f"Momentum: {len(momentum_factors_dict)}/{len(eligible_tickers)} calculados")
+        
+        # Calcular features fundamentalistas
+        logger.info("Calculando features fundamentalistas...")
+        fundamental_calculator = FundamentalFactorCalculator()
+        fundamental_factors_dict = {}
+        
+        for ticker in eligible_tickers:
+            try:
+                # Buscar fundamentos do banco
+                fundamental = db.query(RawFundamental).filter(
+                    RawFundamental.ticker == ticker
+                ).order_by(RawFundamental.period_end_date.desc()).first()
+                
+                if not fundamental:
+                    logger.warning(f"Sem fundamentos para {ticker}")
+                    continue
+                
+                # Buscar preço atual
+                latest_price = db.query(RawPriceDaily).filter(
+                    RawPriceDaily.ticker == ticker
+                ).order_by(RawPriceDaily.date.desc()).first()
+                
+                current_price = latest_price.close if latest_price else 100.0
+                
+                # Preparar dados fundamentalistas
+                fundamentals_data = {
+                    'net_income': fundamental.net_income,
+                    'shareholders_equity': fundamental.shareholders_equity,
+                    'revenue': fundamental.revenue,
+                    'ebitda': fundamental.ebitda,
+                    'total_debt': fundamental.total_debt,
+                    'eps': fundamental.eps,
+                    'enterprise_value': fundamental.enterprise_value,
+                    'book_value_per_share': fundamental.book_value_per_share
+                }
+                
+                # Calcular fatores
+                factors = fundamental_calculator.calculate_all_factors(ticker, fundamentals_data, current_price)
+                fundamental_factors_dict[ticker] = factors
+                
+            except Exception as e:
+                logger.warning(f"Erro ao calcular fundamentos para {ticker}: {e}")
+        
+        logger.info(f"Fundamentos: {len(fundamental_factors_dict)}/{len(eligible_tickers)} calculados")
+        
+        # Normalizar e salvar features
+        logger.info("Normalizando e salvando features...")
+        normalizer = CrossSectionalNormalizer()
+        
+        # Normalizar momentum
+        if momentum_factors_dict:
+            momentum_df = pd.DataFrame(momentum_factors_dict).T
+            momentum_columns = [col for col in momentum_df.columns if momentum_df[col].notna().any()]
+            normalized_momentum = normalizer.normalize_factors(momentum_df, momentum_columns)
+            
+            # Salvar features diárias
+            for ticker in normalized_momentum.index:
+                factors = {col: normalized_momentum.loc[ticker, col] for col in momentum_columns}
+                feature_service.save_daily_features(ticker, date.today(), factors)
+            
+            db.commit()
+            logger.info(f"Features diárias salvas: {len(normalized_momentum)} tickers")
+        
+        # Normalizar fundamentalistas
+        if fundamental_factors_dict:
+            fundamental_df = pd.DataFrame(fundamental_factors_dict).T
+            fundamental_columns = [col for col in fundamental_df.columns if fundamental_df[col].notna().any()]
+            normalized_fundamental = normalizer.normalize_factors(fundamental_df, fundamental_columns)
+            
+            # Salvar features mensais
+            month_start = date(date.today().year, date.today().month, 1)
+            for ticker in normalized_fundamental.index:
+                factors = {col: normalized_fundamental.loc[ticker, col] for col in fundamental_columns}
+                feature_service.save_monthly_features(ticker, month_start, factors)
+            
+            db.commit()
+            logger.info(f"Features mensais salvas: {len(normalized_fundamental)} tickers")
         
         # Calcular scores
-        scoring_stats = calculate_scores(db, eligible_tickers, date.today(), exclusion_reasons)
+        logger.info("Calculando scores...")
+        scoring_engine = ScoringEngine(settings)
+        score_service = ScoreService(db)
+        confidence_engine = ConfidenceEngine()
         
-        # Gerar ranking
-        ranking_size = generate_ranking(db, date.today())
+        scores_calculated = 0
+        for ticker in eligible_tickers:
+            try:
+                # Obter features
+                daily_features = feature_service.get_daily_features(ticker, date.today())
+                month_start = date(date.today().year, date.today().month, 1)
+                monthly_features = feature_service.get_monthly_features(ticker, month_start)
+                
+                if not daily_features or not monthly_features:
+                    logger.warning(f"Features faltando para {ticker}")
+                    continue
+                
+                # Preparar fatores
+                momentum_factors = {
+                    'return_6m': daily_features.return_6m,
+                    'return_12m': daily_features.return_12m,
+                    'rsi_14': daily_features.rsi_14,
+                    'volatility_90d': daily_features.volatility_90d,
+                    'recent_drawdown': daily_features.recent_drawdown
+                }
+                
+                fundamental_factors = {
+                    'roe': monthly_features.roe,
+                    'net_margin': monthly_features.net_margin,
+                    'revenue_growth_3y': monthly_features.revenue_growth_3y,
+                    'debt_to_ebitda': monthly_features.debt_to_ebitda,
+                    'pe_ratio': monthly_features.pe_ratio,
+                    'ev_ebitda': monthly_features.ev_ebitda,
+                    'pb_ratio': monthly_features.pb_ratio
+                }
+                
+                # Calcular score
+                score_result = scoring_engine.score_asset(ticker, fundamental_factors, momentum_factors)
+                score_result.passed_eligibility = True
+                score_result.exclusion_reasons = []
+                
+                # Calcular confiança
+                confidence = confidence_engine.calculate_confidence(ticker, date.today())
+                score_result.confidence = confidence
+                
+                # Salvar score
+                score_service.save_score(score_result, date.today())
+                scores_calculated += 1
+                
+            except Exception as e:
+                logger.warning(f"Erro ao calcular score para {ticker}: {e}")
+        
+        logger.info(f"Scores: {scores_calculated}/{len(eligible_tickers)} calculados")
+        
+        # Atualizar ranks
+        logger.info("Atualizando ranking...")
+        score_service.update_ranks(date.today())
+        ranking_size = scores_calculated
         
         # Atualizar estatísticas finais
         tracker.update_stats(
