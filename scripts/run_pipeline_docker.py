@@ -581,17 +581,33 @@ def run_pipeline_docker(
         # Normalizar fundamentalistas
         if fundamental_factors_dict:
             fundamental_df = pd.DataFrame(fundamental_factors_dict).T
-            fundamental_columns = [col for col in fundamental_df.columns if fundamental_df[col].notna().any()]
-            normalized_fundamental = normalizer.normalize_factors(fundamental_df, fundamental_columns)
             
-            # Salvar features mensais
-            month_start = date(date.today().year, date.today().month, 1)
-            for ticker in normalized_fundamental.index:
-                factors = {col: normalized_fundamental.loc[ticker, col] for col in fundamental_columns}
-                feature_service.save_monthly_features(ticker, month_start, factors)
+            # Filtrar apenas colunas numéricas (excluir listas como net_income_history)
+            numeric_columns = []
+            for col in fundamental_df.columns:
+                # Verificar se a coluna tem valores não-nulos e se são numéricos
+                if fundamental_df[col].notna().any():
+                    # Pegar primeiro valor não-nulo para verificar tipo
+                    first_value = fundamental_df[col].dropna().iloc[0] if len(fundamental_df[col].dropna()) > 0 else None
+                    # Incluir apenas se for número (int, float) e não lista/dict
+                    if first_value is not None and isinstance(first_value, (int, float)) and not isinstance(first_value, bool):
+                        numeric_columns.append(col)
             
-            db.commit()
-            logger.info(f"Features mensais salvas: {len(normalized_fundamental)} tickers")
+            logger.info(f"Colunas numéricas para normalização: {numeric_columns}")
+            
+            if numeric_columns:
+                normalized_fundamental = normalizer.normalize_factors(fundamental_df, numeric_columns)
+                
+                # Salvar features mensais
+                month_start = date(date.today().year, date.today().month, 1)
+                for ticker in normalized_fundamental.index:
+                    factors = {col: normalized_fundamental.loc[ticker, col] for col in numeric_columns}
+                    feature_service.save_monthly_features(ticker, month_start, factors)
+                
+                db.commit()
+                logger.info(f"Features mensais salvas: {len(normalized_fundamental)} tickers")
+            else:
+                logger.warning("Nenhuma coluna numérica encontrada para normalização")
         
         # Calcular scores
         logger.info("Calculando scores...")
