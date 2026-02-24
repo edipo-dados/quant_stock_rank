@@ -542,8 +542,13 @@ def run_pipeline_docker(
                     'book_value_per_share': fundamental.book_value_per_share
                 }
                 
-                # Calcular fatores
-                factors = fundamental_calculator.calculate_all_factors(ticker, fundamentals_data, current_price)
+                # Calcular fatores (sem histórico por enquanto)
+                factors = fundamental_calculator.calculate_all_factors(
+                    ticker=ticker,
+                    fundamentals_data=fundamentals_data,
+                    fundamentals_history=None,  # Sem histórico
+                    current_price=current_price
+                )
                 fundamental_factors_dict[ticker] = factors
                 
             except Exception as e:
@@ -598,11 +603,11 @@ def run_pipeline_docker(
                 month_start = date(date.today().year, date.today().month, 1)
                 monthly_features = feature_service.get_monthly_features(ticker, month_start)
                 
-                if not daily_features or not monthly_features:
-                    logger.warning(f"Features faltando para {ticker}")
+                if not daily_features:
+                    logger.warning(f"Features de momentum faltando para {ticker}")
                     continue
                 
-                # Preparar fatores
+                # Preparar fatores de momentum
                 momentum_factors = {
                     'return_6m': daily_features.return_6m,
                     'return_12m': daily_features.return_12m,
@@ -611,15 +616,20 @@ def run_pipeline_docker(
                     'recent_drawdown': daily_features.recent_drawdown
                 }
                 
-                fundamental_factors = {
-                    'roe': monthly_features.roe,
-                    'net_margin': monthly_features.net_margin,
-                    'revenue_growth_3y': monthly_features.revenue_growth_3y,
-                    'debt_to_ebitda': monthly_features.debt_to_ebitda,
-                    'pe_ratio': monthly_features.pe_ratio,
-                    'ev_ebitda': monthly_features.ev_ebitda,
-                    'pb_ratio': monthly_features.pb_ratio
-                }
+                # Preparar fatores fundamentalistas (usar None se não disponível)
+                fundamental_factors = {}
+                if monthly_features:
+                    fundamental_factors = {
+                        'roe': monthly_features.roe,
+                        'net_margin': monthly_features.net_margin,
+                        'revenue_growth_3y': monthly_features.revenue_growth_3y,
+                        'debt_to_ebitda': monthly_features.debt_to_ebitda,
+                        'pe_ratio': monthly_features.pe_ratio,
+                        'ev_ebitda': monthly_features.ev_ebitda,
+                        'pb_ratio': monthly_features.pb_ratio
+                    }
+                else:
+                    logger.warning(f"Features fundamentalistas faltando para {ticker}, usando apenas momentum")
                 
                 # Calcular score
                 score_result = scoring_engine.score_asset(ticker, fundamental_factors, momentum_factors)
