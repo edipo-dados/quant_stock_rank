@@ -19,7 +19,7 @@ services:
     networks:
       - quant-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quant_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quant_user} -d ${POSTGRES_DB:-quant_ranker}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,6 +36,9 @@ services:
       - 8.8.4.4
     environment:
       # Database - PostgreSQL
+      POSTGRES_USER: ${POSTGRES_USER:-quant_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quant_password}
+      POSTGRES_DB: ${POSTGRES_DB:-quant_ranker}
       DATABASE_URL: postgresql://${POSTGRES_USER:-quant_user}:${POSTGRES_PASSWORD:-quant_password}@postgres:5432/${POSTGRES_DB:-quant_ranker}
       
       # Scoring Weights
@@ -61,7 +64,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
