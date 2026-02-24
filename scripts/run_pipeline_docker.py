@@ -530,16 +530,18 @@ def run_pipeline_docker(
                 
                 current_price = latest_price.close if latest_price else 100.0
                 
-                # Preparar dados fundamentalistas
+                # Preparar dados fundamentalistas (incluir cash=0 como fallback)
                 fundamentals_data = {
                     'net_income': fundamental.net_income,
                     'shareholders_equity': fundamental.shareholders_equity,
                     'revenue': fundamental.revenue,
                     'ebitda': fundamental.ebitda,
                     'total_debt': fundamental.total_debt,
+                    'cash': 0.0,  # Fallback - não temos cash no schema ainda
                     'eps': fundamental.eps,
                     'enterprise_value': fundamental.enterprise_value,
-                    'book_value_per_share': fundamental.book_value_per_share
+                    'book_value_per_share': fundamental.book_value_per_share,
+                    'total_assets': fundamental.total_assets  # Adicionar para ROA
                 }
                 
                 # Calcular fatores (sem histórico por enquanto)
@@ -553,6 +555,8 @@ def run_pipeline_docker(
                 
             except Exception as e:
                 logger.warning(f"Erro ao calcular fundamentos para {ticker}: {e}")
+                import traceback
+                logger.debug(f"Traceback: {traceback.format_exc()}")
         
         logger.info(f"Fundamentos: {len(fundamental_factors_dict)}/{len(eligible_tickers)} calculados")
         
