@@ -3,7 +3,9 @@
 ## Problema
 Os scores não estavam sendo salvos no banco de dados. O pipeline executava, mas a tabela `scores_daily` permanecia vazia.
 
-## Causa Raiz
+## Causas Raiz
+
+### Causa 1: Campos Faltantes
 O cálculo de fundamentos falhava com erro: `object of type 'float' has no len()`
 
 Análise detalhada:
@@ -15,9 +17,19 @@ Análise detalhada:
    - `cash`: necessário para `calculate_financial_strength` (cálculo de dívida líquida)
    - `total_assets`: necessário para ROA em instituições financeiras
 
+### Causa 2: Colunas Não-Numéricas na Normalização
+Após corrigir a Causa 1, surgiu novo erro: `TypeError: unhashable type: 'list'`
+
+Análise detalhada:
+1. Fatores fundamentais incluem campo `net_income_history` (lista de valores)
+2. Este campo é metadata, não um fator numérico
+3. O normalizador tentava processar todas as colunas, incluindo listas
+4. Pandas não consegue calcular `nunique()` em listas (unhashable)
+5. Pipeline falhava na etapa de normalização
+
 ## Solução Implementada
 
-### Arquivo: `scripts/run_pipeline_docker.py`
+### Correção 1: Arquivo `scripts/run_pipeline_docker.py` - Campos Faltantes
 
 Adicionados campos faltantes no dicionário `fundamentals_data`:
 
@@ -43,6 +55,32 @@ except Exception as e:
     import traceback
     logger.debug(f"Traceback: {traceback.format_exc()}")  # ✅ NOVO
 ```
+
+### Correção 2: Arquivo `scripts/run_pipeline_docker.py` - Filtro de Colunas
+
+Implementado filtro para excluir colunas não-numéricas antes da normalização:
+
+```python
+# Filtrar apenas colunas numéricas (excluir listas como net_income_history)
+numeric_columns = []
+for col in fundamental_df.columns:
+    if fundamental_df[col].notna().any():
+        first_value = fundamental_df[col].dropna().iloc[0] if len(fundamental_df[col].dropna()) > 0 else None
+        # Incluir apenas se for número (int, float) e não lista/dict
+        if first_value is not None and isinstance(first_value, (int, float)) and not isinstance(first_value, bool):
+            numeric_columns.append(col)
+
+logger.info(f"Colunas numéricas para normalização: {numeric_columns}")
+
+if numeric_columns:
+    normalized_fundamental = normalizer.normalize_factors(fundamental_df, numeric_columns)
+```
+
+**Benefícios:**
+- Exclui automaticamente `net_income_history` (lista)
+- Exclui qualquer outro campo não-numérico futuro
+- Log das colunas selecionadas para debug
+- Previne erros de tipo no normalizador
 
 ## Impacto da Correção
 
@@ -108,14 +146,17 @@ Tabela scores_daily: 5 registros ✅
 ## Arquivos Modificados
 
 1. `scripts/run_pipeline_docker.py`
-   - Adicionados campos `cash` e `total_assets`
-   - Melhorado logging de erros
+   - ✅ Adicionados campos `cash` e `total_assets`
+   - ✅ Melhorado logging de erros com traceback
+   - ✅ Implementado filtro de colunas numéricas
+   - ✅ Excluídas listas/dicts da normalização
 
 2. `TESTE_EC2.md` (NOVO)
    - Guia completo de teste no EC2
+   - Troubleshooting para ambos os erros
 
 3. `RESUMO_CORRECAO.md` (NOVO)
-   - Este documento
+   - Este documento com análise completa
 
 ## Comandos para Deploy
 
@@ -142,10 +183,13 @@ curl http://localhost:8000/api/v1/ranking
 ## Referências
 
 - Issue original: Scores não sendo salvos no banco
-- Erro: `object of type 'float' has no len()`
+- Erro 1: `object of type 'float' has no len()`
+- Erro 2: `TypeError: unhashable type: 'list'`
 - Logs: Pipeline executava mas `scores_daily` vazio
-- Causa: Campos faltantes em `fundamentals_data`
-- Solução: Adicionar `cash` e `total_assets`
+- Causa 1: Campos faltantes em `fundamentals_data`
+- Causa 2: Colunas não-numéricas na normalização
+- Solução 1: Adicionar `cash` e `total_assets`
+- Solução 2: Filtrar apenas colunas numéricas
 
 ## Contato
 

@@ -1,15 +1,30 @@
 # Guia de Teste - Correção de Scores no EC2
 
 ## Problema Identificado
-Os fundamentos não estavam sendo calculados devido a campos faltantes no dicionário `fundamentals_data`:
-- Campo `cash` estava faltando (necessário para `calculate_financial_strength`)
-- Campo `total_assets` estava faltando (necessário para ROA em instituições financeiras)
+Os fundamentos não estavam sendo calculados devido a dois problemas:
+
+1. **Campos faltantes** no dicionário `fundamentals_data`:
+   - Campo `cash` estava faltando (necessário para `calculate_financial_strength`)
+   - Campo `total_assets` estava faltando (necessário para ROA em instituições financeiras)
+
+2. **Colunas não-numéricas** sendo passadas para normalização:
+   - Campo `net_income_history` é uma lista, não um valor numérico
+   - O normalizador tentava processar listas, causando erro `TypeError: unhashable type: 'list'`
 
 ## Correção Aplicada
+
+### Correção 1: Campos Faltantes
 Adicionados os campos faltantes com valores fallback:
 - `cash`: 0.0 (fallback até implementarmos a coleta deste dado)
 - `total_assets`: valor do banco de dados
 - Melhorado logging de erros com traceback completo
+
+### Correção 2: Filtro de Colunas Numéricas
+Implementado filtro para excluir colunas não-numéricas antes da normalização:
+- Verifica tipo de cada coluna
+- Inclui apenas valores numéricos (int, float)
+- Exclui listas, dicts e outros tipos não-numéricos
+- Log das colunas selecionadas para debug
 
 ## Passos para Testar no EC2
 
@@ -58,10 +73,12 @@ docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scri
 
 ### 8. Verificar Logs do Pipeline
 Procure por:
+- ✅ "Colunas numéricas para normalização: [...]" (deve listar as colunas)
 - ✅ "Fundamentos: X/5 calculados" (deve ser > 0, idealmente 5/5)
 - ✅ "Features mensais salvas: X tickers" (deve ser > 0)
 - ✅ "Scores: X/5 calculados" (deve ser 5/5)
 - ❌ "Erro ao calcular fundamentos" (não deve aparecer mais)
+- ❌ "unhashable type: 'list'" (não deve aparecer mais)
 
 ### 9. Verificar Dados no Banco
 ```bash
@@ -107,6 +124,12 @@ Scores: 5/5 calculados (com fundamentos completos)
 ```
 
 ## Troubleshooting
+
+### Se houver erro "unhashable type: 'list'"
+Este erro foi corrigido. Se ainda aparecer:
+1. Verifique se o código foi atualizado: `git log --oneline -1`
+2. Rebuild do backend: `docker compose build --no-cache backend`
+3. Verifique os logs: `docker logs quant-ranker-backend --tail 100`
 
 ### Se ainda houver erro "object of type 'float' has no len()"
 Verifique os logs detalhados:
