@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     curl \
     libpq-dev \
+    bash \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar arquivo de dependências
@@ -25,7 +26,8 @@ COPY app/ ./app/
 COPY scripts/ ./scripts/
 
 # Tornar script executável
-RUN chmod +x /app/scripts/docker_init.sh
+RUN chmod +x /app/scripts/docker_init.sh && \
+    ls -la /app/scripts/docker_init.sh
 
 # Criar diretórios necessários
 RUN mkdir -p /app/logs
@@ -43,4 +45,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
 # Script de inicialização
-CMD ["/app/scripts/docker_init.sh"]
+CMD ["bash", "/app/scripts/docker_init.sh"]
