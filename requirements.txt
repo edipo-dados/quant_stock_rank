@@ -14,7 +14,7 @@ pandas==2.2.0
 numpy==1.26.3
 
 # Data Sources
-yfinance==0.2.35
+yfinance>=0.2.54
 requests==2.31.0
 
 # Testing
