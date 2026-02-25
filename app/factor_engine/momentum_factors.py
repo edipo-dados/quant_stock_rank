@@ -114,6 +114,108 @@ class MomentumFactorCalculator:
         except (TypeError, ValueError, KeyError) as e:
             raise CalculationError(f"Error calculating 12m return: {e}")
     
+    def calculate_return_1m(self, prices: pd.DataFrame) -> float:
+        """
+        Calcula retorno acumulado do último mês.
+        
+        Retorno = (Preço_final / Preço_inicial) - 1
+        
+        Args:
+            prices: DataFrame com coluna 'adj_close' e índice de datas,
+                   ordenado cronologicamente (mais antigo primeiro)
+            
+        Returns:
+            Retorno de 1 mês como float
+            
+        Raises:
+            InsufficientDataError: Se não há dados suficientes (mínimo ~21 dias úteis)
+            CalculationError: Se preço inicial é zero ou inválido
+        """
+        try:
+            if len(prices) < 21:  # ~1 mês de dias úteis
+                raise InsufficientDataError(
+                    f"Need at least 21 days for 1m return, got {len(prices)}"
+                )
+            
+            if 'adj_close' not in prices.columns:
+                raise InsufficientDataError("Missing 'adj_close' column in prices")
+            
+            # Pegar últimos 21 dias úteis (~1 mês)
+            recent_prices = prices.tail(21)
+            
+            initial_price = recent_prices['adj_close'].iloc[0]
+            final_price = recent_prices['adj_close'].iloc[-1]
+            
+            if pd.isna(initial_price) or pd.isna(final_price):
+                raise InsufficientDataError("Missing price data for 1m return")
+            
+            if initial_price <= 0:
+                raise CalculationError(
+                    f"Invalid initial price for 1m return: {initial_price}"
+                )
+            
+            return (final_price / initial_price) - 1
+            
+        except (TypeError, ValueError, KeyError) as e:
+            raise CalculationError(f"Error calculating 1m return: {e}")
+    
+    def calculate_momentum_12m_ex_1m(self, prices: pd.DataFrame) -> float:
+        """
+        Calcula momentum de 12 meses excluindo o último mês (acadêmico).
+        
+        Este é o fator de momentum clássico usado em pesquisa acadêmica,
+        que exclui o último mês para evitar efeitos de reversão de curto prazo.
+        
+        Momentum_12m_ex_1m = Return_12m - Return_1m
+        
+        Args:
+            prices: DataFrame com coluna 'adj_close' e índice de datas,
+                   ordenado cronologicamente (mais antigo primeiro)
+            
+        Returns:
+            Momentum de 12 meses excluindo último mês como float
+            
+        Raises:
+            InsufficientDataError: Se não há dados suficientes
+            CalculationError: Se cálculo falhar
+        """
+        try:
+            return_12m = self.calculate_return_12m(prices)
+            return_1m = self.calculate_return_1m(prices)
+            
+            return return_12m - return_1m
+            
+        except (InsufficientDataError, CalculationError) as e:
+            raise CalculationError(f"Error calculating 12m ex 1m momentum: {e}")
+    
+    def calculate_momentum_6m_ex_1m(self, prices: pd.DataFrame) -> float:
+        """
+        Calcula momentum de 6 meses excluindo o último mês (acadêmico).
+        
+        Similar ao momentum de 12 meses, mas para horizonte de 6 meses.
+        
+        Momentum_6m_ex_1m = Return_6m - Return_1m
+        
+        Args:
+            prices: DataFrame com coluna 'adj_close' e índice de datas,
+                   ordenado cronologicamente (mais antigo primeiro)
+            
+        Returns:
+            Momentum de 6 meses excluindo último mês como float
+            
+        Raises:
+            InsufficientDataError: Se não há dados suficientes
+            CalculationError: Se cálculo falhar
+        """
+        try:
+            return_6m = self.calculate_return_6m(prices)
+            return_1m = self.calculate_return_1m(prices)
+            
+            return return_6m - return_1m
+            
+        except (InsufficientDataError, CalculationError) as e:
+            raise CalculationError(f"Error calculating 6m ex 1m momentum: {e}")
+    
     def calculate_rsi_14(self, prices: pd.DataFrame) -> float:
         """
         Calcula RSI (Relative Strength Index) de 14 períodos.
@@ -380,15 +482,19 @@ class MomentumFactorCalculator:
         """
         Calcula todos os fatores de momentum para um ativo.
         
+        Inclui fatores acadêmicos de momentum que excluem o último mês
+        para evitar efeitos de reversão de curto prazo.
+        
         Args:
             ticker: Símbolo do ativo
             prices: DataFrame com coluna 'adj_close' e índice de datas,
                    ordenado cronologicamente (mais antigo primeiro)
             
         Returns:
-            Dict com chaves: return_6m, return_12m, rsi_14,
-                           volatility_90d, volatility_180d, recent_drawdown,
-                           max_drawdown_3y
+            Dict com chaves: return_6m, return_12m, return_1m,
+                           momentum_6m_ex_1m, momentum_12m_ex_1m,
+                           rsi_14, volatility_90d, volatility_180d,
+                           recent_drawdown, max_drawdown_3y
             Fatores que não podem ser calculados terão valor None
             
         Valida: Requisitos 3.1, 3.2, 3.3, 3.4, 3.5, 4.2, 4.3
@@ -409,7 +515,28 @@ class MomentumFactorCalculator:
             logger.warning(f"Could not calculate 12m return for {ticker}: {e}")
             factors['return_12m'] = None
         
-        # RSI 14
+        # Return 1m (novo)
+        try:
+            factors['return_1m'] = self.calculate_return_1m(prices)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate 1m return for {ticker}: {e}")
+            factors['return_1m'] = None
+        
+        # Momentum 12m ex 1m (acadêmico - novo)
+        try:
+            factors['momentum_12m_ex_1m'] = self.calculate_momentum_12m_ex_1m(prices)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate 12m ex 1m momentum for {ticker}: {e}")
+            factors['momentum_12m_ex_1m'] = None
+        
+        # Momentum 6m ex 1m (acadêmico - novo)
+        try:
+            factors['momentum_6m_ex_1m'] = self.calculate_momentum_6m_ex_1m(prices)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate 6m ex 1m momentum for {ticker}: {e}")
+            factors['momentum_6m_ex_1m'] = None
+        
+        # RSI 14 (mantido para compatibilidade, mas não usado no score)
         try:
             factors['rsi_14'] = self.calculate_rsi_14(prices)
         except (InsufficientDataError, CalculationError) as e:

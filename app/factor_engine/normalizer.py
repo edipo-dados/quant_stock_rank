@@ -4,7 +4,7 @@ Normalização cross-sectional de fatores.
 Valida: Requisitos 2.8, 3.6
 """
 
-from typing import List
+from typing import List, Optional
 import pandas as pd
 import numpy as np
 import logging
@@ -277,5 +277,197 @@ class CrossSectionalNormalizer:
                 ranks = normalized_df[col].rank(method='average', na_option='keep')
                 percentile_rank = ranks / non_null_count
                 normalized_df[col] = 2 * percentile_rank - 1
+        
+        return normalized_df
+
+    
+    def sector_neutral_zscore(
+        self,
+        df: pd.DataFrame,
+        feature: str,
+        sector_col: str = "sector",
+        min_sector_size: int = 5
+    ) -> pd.Series:
+        """
+        Calcula z-score setorial (sector-neutral) para um fator.
+        
+        O z-score é calculado dentro de cada setor, comparando ativos apenas
+        com seus pares setoriais. Isso elimina viés setorial e permite
+        comparação mais justa entre ativos de diferentes setores.
+        
+        Metodologia:
+        1. Agrupar ativos por setor
+        2. Para cada setor com >= min_sector_size ativos:
+           - Calcular média e desvio padrão do setor
+           - z-score = (valor - média_setor) / desvio_setor
+        3. Para setores pequenos (< min_sector_size):
+           - Usar z-score do universo total como fallback
+        
+        Args:
+            df: DataFrame com índice de tickers e colunas de fatores + setor
+            feature: Nome da coluna do fator a normalizar
+            sector_col: Nome da coluna de setor (default: "sector")
+            min_sector_size: Tamanho mínimo do setor para z-score setorial (default: 5)
+            
+        Returns:
+            Series com z-scores setoriais (índice = tickers)
+            
+        Raises:
+            ValueError: Se feature ou sector_col não existem no DataFrame
+            
+        Example:
+            >>> df = pd.DataFrame({
+            ...     'roe': [0.15, 0.20, 0.10, 0.25, 0.18],
+            ...     'sector': ['Tech', 'Tech', 'Finance', 'Finance', 'Finance']
+            ... }, index=['AAPL', 'MSFT', 'JPM', 'BAC', 'C'])
+            >>> normalizer = CrossSectionalNormalizer()
+            >>> z_scores = normalizer.sector_neutral_zscore(df, 'roe', 'sector')
+            >>> # AAPL e MSFT comparados apenas com Tech
+            >>> # JPM, BAC, C comparados apenas com Finance
+        """
+        # Validar que as colunas existem
+        if feature not in df.columns:
+            raise ValueError(f"Feature column '{feature}' not found in DataFrame")
+        if sector_col not in df.columns:
+            raise ValueError(f"Sector column '{sector_col}' not found in DataFrame")
+        
+        # Criar série de resultado
+        result = pd.Series(index=df.index, dtype=float)
+        
+        # Calcular z-score global como fallback
+        global_mean = df[feature].mean()
+        global_std = df[feature].std()
+        
+        if global_std == 0 or pd.isna(global_std):
+            logger.warning(f"Global std is zero or NaN for {feature}, returning zeros")
+            return pd.Series(0.0, index=df.index)
+        
+        global_zscore = (df[feature] - global_mean) / global_std
+        
+        # Agrupar por setor e calcular z-score setorial
+        for sector, group in df.groupby(sector_col):
+            sector_size = len(group)
+            
+            # Se setor é muito pequeno, usar z-score global
+            if sector_size < min_sector_size:
+                logger.debug(
+                    f"Sector '{sector}' has only {sector_size} assets (< {min_sector_size}), "
+                    f"using global z-score"
+                )
+                result.loc[group.index] = global_zscore.loc[group.index]
+                continue
+            
+            # Calcular estatísticas do setor
+            sector_mean = group[feature].mean()
+            sector_std = group[feature].std()
+            
+            # Se desvio padrão é zero (todos valores iguais), usar zero
+            if sector_std == 0 or pd.isna(sector_std):
+                logger.debug(
+                    f"Sector '{sector}' has zero std for {feature}, setting z-scores to 0"
+                )
+                result.loc[group.index] = 0.0
+            else:
+                # Calcular z-score setorial
+                sector_zscore = (group[feature] - sector_mean) / sector_std
+                result.loc[group.index] = sector_zscore
+        
+        return result
+    
+    def normalize_factors_sector_neutral(
+        self,
+        factors_df: pd.DataFrame,
+        factor_columns: List[str],
+        sector_col: str = "sector",
+        min_sector_size: int = 5,
+        winsorize: bool = True,
+        lower_pct: float = 0.05,
+        upper_pct: float = 0.95
+    ) -> pd.DataFrame:
+        """
+        Normaliza fatores usando z-score setorial (sector-neutral).
+        
+        Esta é a versão acadêmica da normalização que elimina viés setorial.
+        Cada ativo é comparado apenas com seus pares do mesmo setor.
+        
+        Steps:
+        1. Aplicar winsorização (opcional)
+        2. Calcular z-score setorial para cada fator
+        3. Retornar DataFrame normalizado
+        
+        Args:
+            factors_df: DataFrame com fatores e coluna de setor
+            factor_columns: Lista de colunas de fatores a normalizar
+            sector_col: Nome da coluna de setor (default: "sector")
+            min_sector_size: Tamanho mínimo do setor (default: 5)
+            winsorize: Se True, aplica winsorização antes (default: True)
+            lower_pct: Percentil inferior para winsorização (default: 0.05)
+            upper_pct: Percentil superior para winsorização (default: 0.95)
+            
+        Returns:
+            DataFrame com fatores normalizados (z-scores setoriais)
+            
+        Raises:
+            ValueError: Se colunas não existem no DataFrame
+            
+        Example:
+            >>> df = pd.DataFrame({
+            ...     'roe': [0.15, 0.20, 0.10, 0.25, 0.18],
+            ...     'pe_ratio': [15, 20, 10, 12, 14],
+            ...     'sector': ['Tech', 'Tech', 'Finance', 'Finance', 'Finance']
+            ... }, index=['AAPL', 'MSFT', 'JPM', 'BAC', 'C'])
+            >>> normalizer = CrossSectionalNormalizer()
+            >>> normalized = normalizer.normalize_factors_sector_neutral(
+            ...     df, ['roe', 'pe_ratio'], sector_col='sector'
+            ... )
+        """
+        # Validar que as colunas existem
+        missing_cols = [col for col in factor_columns if col not in factors_df.columns]
+        if missing_cols:
+            raise ValueError(f"Columns not found in DataFrame: {missing_cols}")
+        
+        if sector_col not in factors_df.columns:
+            raise ValueError(f"Sector column '{sector_col}' not found in DataFrame")
+        
+        # Criar cópia para não modificar o original
+        processed_df = factors_df.copy()
+        
+        # Step 1: Aplicar winsorização (se habilitado)
+        if winsorize:
+            for col in factor_columns:
+                if processed_df[col].isna().all():
+                    logger.warning(f"Column '{col}' has all NaN values, skipping winsorization")
+                    continue
+                
+                processed_df[col] = self.winsorize_series(
+                    processed_df[col],
+                    lower_pct=lower_pct,
+                    upper_pct=upper_pct
+                )
+        
+        # Step 2: Calcular z-score setorial para cada fator
+        normalized_df = processed_df.copy()
+        
+        for col in factor_columns:
+            if normalized_df[col].isna().all():
+                logger.warning(f"Column '{col}' has all NaN values, skipping normalization")
+                continue
+            
+            try:
+                normalized_df[col] = self.sector_neutral_zscore(
+                    normalized_df,
+                    feature=col,
+                    sector_col=sector_col,
+                    min_sector_size=min_sector_size
+                )
+            except Exception as e:
+                logger.error(f"Error normalizing {col} with sector-neutral z-score: {e}")
+                # Fallback para z-score global
+                mean = normalized_df[col].mean()
+                std = normalized_df[col].std()
+                if std > 0:
+                    normalized_df[col] = (normalized_df[col] - mean) / std
+                else:
+                    normalized_df[col] = 0.0
         
         return normalized_df
