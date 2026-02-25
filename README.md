@@ -1,176 +1,254 @@
-# 📊 Sistema de Ranking Quantitativo de Ações
+# Quant Stock Ranker 📊
 
-Sistema automatizado para análise e ranking de ações brasileiras usando fatores quantitativos de momentum, qualidade e valor.
+Sistema quantitativo de ranking de ações brasileiras usando análise multifatorial.
 
 ## 🎯 Visão Geral
 
-Avalia ações da B3 através de uma abordagem multi-fator:
-- **Momentum** (40%): Tendências de preço e força relativa
-- **Qualidade** (30%): Fundamentos e consistência financeira
-- **Valor** (30%): Atratividade de valuation
+Sistema completo de análise quantitativa que combina:
+- **Momentum** (40%): Retornos, RSI, volatilidade
+- **Qualidade** (30%): ROE, margens, crescimento
+- **Valor** (30%): P/L, P/VP, EV/EBITDA
 
-## ✨ Características
+## 🚀 Quick Start
 
-- ✅ Análise Multi-Fator com 3 fatores principais
-- ✅ Dados em Tempo Real via Yahoo Finance
-- ✅ API REST com FastAPI
-- ✅ Interface Web com Streamlit
-- ✅ Chat com IA (Gemini 2.5 Flash) para análise conversacional
-- ✅ MCP Server para integração com agentes de IA
-- ✅ Docker com PostgreSQL
-- ✅ Pipeline Inteligente (FULL/INCREMENTAL)
-- ✅ Rate Limiting para proteção de APIs
-
-## 🚀 Início Rápido
-
-### Pré-requisitos
-- Docker e Docker Compose
-- Git
-
-### Instalação
+### Opção 1: Docker (Recomendado)
 
 ```bash
-# 1. Clone o repositório
-git clone https://github.com/seu-usuario/quant_stock_rank.git
+# Clonar repositório
+git clone https://github.com/edipo-dados/quant_stock_rank.git
 cd quant_stock_rank
 
-# 2. Inicie os containers
+# Configurar ambiente
+cp .env.example .env.production
+nano .env.production  # Adicionar suas API keys
+
+# Subir aplicação
 docker-compose up -d
 
-# 3. Execute o pipeline inicial
-docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200"
-
-# 4. Acesse a aplicação
-# Frontend: http://localhost:8501
-# API: http://localhost:8000/docs
-```
-
-
-## 📚 Documentação
-
-- **[Guia de Uso](docs/GUIA_USO.md)**: Tutorial completo de uso
-- **[Cálculos de Ranking](docs/CALCULOS_RANKING.md)**: Metodologia detalhada
-- **[Docker](docs/DOCKER.md)**: Guia completo do Docker
-- **[Chat com IA](docs/CHAT_GEMINI.md)**: Como usar o assistente conversacional
-- **[MCP Server](docs/MCP_SERVER.md)**: Integração com agentes de IA
-- **[API](http://localhost:8000/docs)**: Documentação interativa (Swagger)
-
-## 🔧 Uso Básico
-
-### Executar Pipeline
-
-```bash
-# Modo automático (detecta FULL ou INCREMENTAL)
-docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 200"
-
-# Modo teste (5 ativos)
+# Executar pipeline
 docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode test"
 ```
 
-### Usar API
+Acessar:
+- Frontend: http://localhost:8501
+- API: http://localhost:8000
 
-```bash
-# Health check
-curl http://localhost:8000/health
+### Opção 2: Deploy em EC2
 
-# Ranking completo
-curl http://localhost:8000/api/v1/ranking
+Ver guia completo: [`deploy/SETUP_NOVO_EC2.md`](deploy/SETUP_NOVO_EC2.md)
 
-# Top 10 ativos
-curl http://localhost:8000/api/v1/top?n=10
+## 📚 Documentação
+
+### Guias de Deploy
+- [Setup Novo EC2](deploy/SETUP_NOVO_EC2.md) - Guia passo a passo para novo servidor
+- [EC2 Deploy Completo](deploy/EC2_DEPLOY.md) - Documentação detalhada de deploy
+- [Quick Reference](deploy/QUICK_REFERENCE.md) - Comandos úteis
+
+### Documentação Técnica
+- [Cálculos de Ranking](docs/CALCULOS_RANKING.md) - Metodologia de scoring
+- [Pipeline Inteligente](docs/PIPELINE_INTELIGENTE.md) - Funcionamento do pipeline
+- [Chat Gemini](docs/CHAT_GEMINI.md) - Assistente de IA
+- [Docker](docs/DOCKER.md) - Configuração Docker
+- [MCP Server](docs/MCP_SERVER.md) - Servidor MCP
+- [Guia de Uso](docs/GUIA_USO.md) - Como usar o sistema
+
+### Índices
+- [Documentação Geral](docs/INDEX.md)
+- [Deploy](deploy/INDEX.md)
+
+## 🏗️ Arquitetura
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│  Frontend   │────▶│   Backend    │────▶│ PostgreSQL  │
+│ Streamlit   │     │   FastAPI    │     │  Database   │
+│  (8501)     │     │   (8000)     │     │   (5432)    │
+└─────────────┘     └──────────────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │   Pipeline   │
+                    │  Diário/Cron │
+                    └──────────────┘
 ```
 
-### Chat com IA
+## 🔧 Tecnologias
 
-1. Obtenha API key gratuita: https://makersuite.google.com/app/apikey
-2. Acesse http://localhost:8501
-3. Navegue para "💬 Chat Assistente"
-4. Cole sua API key
-5. Converse naturalmente sobre ações!
+- **Backend**: FastAPI, SQLAlchemy, Pandas
+- **Frontend**: Streamlit
+- **Database**: PostgreSQL
+- **Data Sources**: yfinance, FMP API
+- **AI**: Google Gemini 2.5 Flash
+- **Deploy**: Docker, Docker Compose
 
-## 📈 Metodologia
+## 📊 Funcionalidades
 
-### Fatores Avaliados
+### 1. Ranking Quantitativo
+- Análise multifatorial de ações
+- Scores normalizados cross-sectionally
+- Ranking diário atualizado
 
-**Momentum (40%)**
-- Retorno 6 e 12 meses
-- RSI 14 dias
-- Volatilidade e Drawdown
+### 2. Chat Assistente (IA)
+- Análise de ativos com IA
+- Busca web integrada
+- Consulta a fontes brasileiras (Status Invest, Investidor10, etc)
 
-**Qualidade (30%)**
-- ROE e Margem líquida
-- Crescimento de receita
-- Consistência financeira
+### 3. Detalhes do Ativo
+- Histórico de scores
+- Breakdown por fator
+- Métricas fundamentalistas
 
-**Valor (30%)**
-- P/E, P/B, EV/EBITDA
-- Debt to EBITDA
+### 4. Pipeline Automatizado
+- Ingestão de dados (preços + fundamentos)
+- Cálculo de fatores
+- Normalização e scoring
+- Execução via cron job
 
-Veja detalhes em [Cálculos de Ranking](docs/CALCULOS_RANKING.md).
-
-## ⚙️ Configuração
-
-Edite `.env` para ajustar pesos dos fatores:
+## 🔑 Variáveis de Ambiente
 
 ```env
-MOMENTUM_WEIGHT=0.4  # 40%
-QUALITY_WEIGHT=0.3   # 30%
-VALUE_WEIGHT=0.3     # 30%
+# Database
+DATABASE_URL=postgresql://quant_user:quant_password@postgres:5432/quant_ranker
+POSTGRES_USER=quant_user
+POSTGRES_PASSWORD=quant_password
+POSTGRES_DB=quant_ranker
+
+# API Keys
+FMP_API_KEY=sua_chave_fmp
+GEMINI_API_KEY=sua_chave_gemini
+
+# Scoring Weights
+MOMENTUM_WEIGHT=0.4
+QUALITY_WEIGHT=0.3
+VALUE_WEIGHT=0.3
 ```
 
-## 🛠️ Desenvolvimento
+## 🚀 Comandos Úteis
 
-### Estrutura do Projeto
+### Docker
+```bash
+# Ver status
+docker-compose ps
 
+# Ver logs
+docker logs -f quant-ranker-backend
+
+# Restart
+docker-compose restart
+
+# Rebuild
+docker-compose build --no-cache
+docker-compose up -d
 ```
-quant_stock_rank/
-├── app/              # Backend FastAPI
-├── frontend/         # Frontend Streamlit
-├── scripts/          # Scripts de pipeline
-├── tests/            # Testes
-├── docker/           # Dockerfiles
-└── docs/             # Documentação
+
+### Pipeline
+```bash
+# Modo teste (5 ativos)
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode test"
+
+# Modo produção (50 ativos líquidos)
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 50"
+
+# Forçar recarga completa
+docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full"
 ```
 
-### Executar Testes
+### Database
+```bash
+# Entrar no PostgreSQL
+docker exec -it quant-ranker-db psql -U quant_user -d quant_ranker
+
+# Backup
+docker exec quant-ranker-db pg_dump -U quant_user quant_ranker > backup.sql
+
+# Restaurar
+cat backup.sql | docker exec -i quant-ranker-db psql -U quant_user -d quant_ranker
+
+# Ver contagem de registros
+docker exec -it quant-ranker-db psql -U quant_user -d quant_ranker -c "SELECT COUNT(*) FROM scores_daily;"
+```
+
+## 📅 Cron Job (Pipeline Automático)
+
+Para executar o pipeline automaticamente de segunda a sexta às 13:30:
 
 ```bash
-docker exec quant-ranker-backend bash -c "cd /app && pytest tests/"
+crontab -e
+```
+
+Adicionar:
+```cron
+30 13 * * 1-5 cd ~/quant_stock_rank && docker exec quant-ranker-backend bash -c "cd /app && PYTHONPATH=/app python scripts/run_pipeline_docker.py --mode liquid --limit 50" >> ~/pipeline.log 2>&1
 ```
 
 ## 🐛 Troubleshooting
 
+### Containers não sobem
 ```bash
-# Ver logs
-docker logs quant-ranker-backend --tail 50
-
-# Reiniciar containers
-docker-compose restart
-
-# Reconstruir
-docker-compose down
-docker-compose build
+docker-compose logs
+docker-compose down -v
+docker system prune -a
 docker-compose up -d
 ```
 
-Veja mais em [Guia de Uso - Troubleshooting](docs/GUIA_USO.md).
+### Backend não conecta ao banco
+```bash
+docker logs quant-ranker-db
+docker exec quant-ranker-backend printenv | grep DATABASE
+```
 
-## 📝 Licença
+### Frontend não carrega
+```bash
+docker logs quant-ranker-frontend
+docker-compose restart frontend
+```
 
-MIT License - Código aberto
+### Pipeline falha
+```bash
+docker logs quant-ranker-backend --tail 100
+docker exec -it quant-ranker-db psql -U quant_user -d quant_ranker -c "SELECT * FROM pipeline_executions ORDER BY execution_date DESC LIMIT 5;"
+```
+
+## 📈 Roadmap
+
+- [x] Sistema de ranking multifatorial
+- [x] Chat assistente com IA
+- [x] Pipeline automatizado
+- [x] Deploy em Docker
+- [x] Integração com fontes brasileiras
+- [ ] Backtesting de estratégias
+- [ ] Alertas por email/telegram
+- [ ] Dashboard de performance
+- [ ] API pública
 
 ## 🤝 Contribuindo
 
 1. Fork o projeto
-2. Crie uma branch (`git checkout -b feature/AmazingFeature`)
-3. Commit (`git commit -m 'Add AmazingFeature'`)
-4. Push (`git push origin feature/AmazingFeature`)
+2. Crie uma branch (`git checkout -b feature/nova-feature`)
+3. Commit suas mudanças (`git commit -m 'Add nova feature'`)
+4. Push para a branch (`git push origin feature/nova-feature`)
 5. Abra um Pull Request
 
-## ⚠️ Aviso Legal
+## 📝 Changelog
 
-Este sistema é apenas para fins educacionais e de pesquisa. Não constitui recomendação de investimento. Sempre consulte um profissional qualificado antes de tomar decisões de investimento.
+Ver [CHANGELOG.md](CHANGELOG.md) para histórico de versões.
+
+## 📄 Licença
+
+Este projeto é privado e proprietário.
+
+## 👤 Autor
+
+Desenvolvido para análise quantitativa de ações brasileiras.
+
+## 🆘 Suporte
+
+Para problemas ou dúvidas:
+1. Verificar [Troubleshooting](#-troubleshooting)
+2. Consultar documentação em `docs/`
+3. Ver logs: `docker logs quant-ranker-backend`
 
 ---
 
-**Desenvolvido com ❤️ para a comunidade de investidores quantitativos**
+**Versão**: 2.1.0  
+**Última atualização**: 24/02/2026

@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.1.1] - 2026-02-24
+
+### 🐛 Corrigido
+- Pipeline: Adicionados campos `cash` e `total_assets` ao dicionário fundamentals_data
+- Pipeline: Implementado filtro de colunas numéricas antes da normalização
+- Pipeline: Corrigido erro "unhashable type: 'list'" ao normalizar net_income_history
+- Pipeline: Melhorado logging com traceback completo para debug
+
+### ✨ Adicionado
+- Documentação: SETUP_NOVO_EC2.md - Guia simples de setup para novo servidor
+- Documentação: Guia de configuração de cron job para pipeline automático
+- Documentação: Comandos úteis para execução manual do pipeline
+
+### 🗑️ Removido
+- Arquivos temporários: QUICK_FIX.md, RESUMO_CORRECAO.md, TESTE_EC2.md
+- Documentação obsoleta: RENDER_*.md, railway.md, DECISION_TREE.md
+
+### 📚 Documentação
+- README.md: Atualizado com informações completas e atuais
+- deploy/INDEX.md: Reorganizado com fluxo claro de deploy
+- Estrutura de documentação consolidada e limpa
+
 ## [2.1.0] - 2026-02-23
 
 ### ✨ Adicionado
