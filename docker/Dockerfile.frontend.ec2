@@ -1,16 +1,28 @@
-# Dockerfile para Frontend Streamlit
-# Valida: Requisito 13.2
+# Dockerfile otimizado para Frontend Streamlit no EC2
+# Instala dependências em etapas para evitar timeout
 
 FROM python:3.11-slim
 
 # Definir diretório de trabalho
 WORKDIR /app
 
+# Instalar curl para health check
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Atualizar pip
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
 # Copiar arquivo de dependências (frontend only)
 COPY requirements-frontend.txt .
 
-# Instalar dependências Python
-RUN pip install --no-cache-dir -r requirements-frontend.txt
+# Instalar dependências em etapas
+RUN pip install --no-cache-dir streamlit==1.30.0
+RUN pip install --no-cache-dir plotly==5.18.0
+RUN pip install --no-cache-dir pandas==2.2.0
+RUN pip install --no-cache-dir numpy==1.26.3
+RUN pip install --no-cache-dir requests==2.31.0
+RUN pip install --no-cache-dir python-dotenv==1.0.0
+RUN pip install --no-cache-dir pydantic==2.5.3
 
 # Copiar código da aplicação
 COPY frontend/ ./frontend/

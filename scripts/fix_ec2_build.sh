@@ -57,7 +57,8 @@ if [ -f "docker/Dockerfile.backend.ec2" ]; then
     # Atualizar docker-compose.yml para usar Dockerfile otimizado
     echo "🔧 Atualizando docker-compose.yml..."
     sed -i 's|dockerfile: docker/Dockerfile.backend|dockerfile: docker/Dockerfile.backend.ec2|g' docker-compose.yml
-    echo "✅ docker-compose.yml atualizado"
+    sed -i 's|dockerfile: docker/Dockerfile.frontend|dockerfile: docker/Dockerfile.frontend.ec2|g' docker-compose.yml
+    echo "✅ docker-compose.yml atualizado (backend e frontend)"
 else
     echo "⚠️  Dockerfile.backend.ec2 não encontrado"
     echo "   Usando Dockerfile.backend padrão"

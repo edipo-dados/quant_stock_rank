@@ -79,6 +79,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend
+      # Para EC2 com pouca memória (t2.micro/t2.small), use:
+      # dockerfile: docker/Dockerfile.frontend.ec2
     container_name: quant-ranker-frontend
     environment:
       # Backend URL - DEVE usar o nome do serviço 'backend' no Docker

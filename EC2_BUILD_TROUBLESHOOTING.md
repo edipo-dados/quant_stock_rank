@@ -43,6 +43,11 @@ backend:
   build:
     context: .
     dockerfile: docker/Dockerfile.backend.ec2  # <-- Mudar para .ec2
+
+frontend:
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.frontend.ec2  # <-- Mudar para .ec2
 ```
 
 Salvar (Ctrl+O, Enter, Ctrl+X) e rebuild:

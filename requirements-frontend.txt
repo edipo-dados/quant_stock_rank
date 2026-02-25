@@ -1,0 +1,19 @@
+# Frontend Dependencies Only
+# Minimal requirements for Streamlit frontend
+
+# Frontend
+streamlit==1.30.0
+plotly==5.18.0
+
+# API Client
+requests==2.31.0
+
+# Data Processing (needed for frontend display)
+pandas==2.2.0
+numpy==1.26.3
+
+# Utilities
+python-dotenv==1.0.0
+
+# Pydantic (for API schemas)
+pydantic==2.5.3
