@@ -1,13 +1,26 @@
 # Quant Stock Ranker 📊
 
-Sistema quantitativo de ranking de ações brasileiras usando análise multifatorial.
+Sistema quantitativo de ranking de ações brasileiras usando análise multifatorial com metodologia acadêmica.
+
+**Versão**: 2.5.0 | **Última Atualização**: 2026-02-25
 
 ## 🎯 Visão Geral
 
 Sistema completo de análise quantitativa que combina:
-- **Momentum** (40%): Retornos, RSI, volatilidade
-- **Qualidade** (30%): ROE, margens, crescimento
-- **Valor** (30%): P/L, P/VP, EV/EBITDA
+- **Momentum** (35%): Momentum acadêmico (exclui último mês), volatilidade, drawdown
+- **Qualidade** (25%): ROE, margens, crescimento, estabilidade
+- **Valor** (30%): P/L, P/VP, EV/EBITDA, FCF Yield
+- **Size** (10%): Size premium (empresas menores)
+
+### ✨ Novidades v2.5.0
+
+- ✅ **Backtest Mensal**: CAGR, Sharpe Ratio, Max Drawdown, Turnover
+- ✅ **Suavização Temporal**: Reduz turnover (alpha=0.7)
+- ✅ **Momentum Acadêmico**: Exclui último mês (Jegadeesh 1990)
+- ✅ **VALUE Expandido**: 5 indicadores (P/L, P/VP, EV/EBITDA, FCF Yield, Debt/EBITDA)
+- ✅ **Fator SIZE**: Size premium (Fama-French)
+- ✅ **Missing Values**: Tratamento acadêmico (críticos vs secundários)
+- ✅ **Sem Penalidades Fixas**: Penalização contínua baseada em fatores
 
 ## 🚀 Quick Start
 
@@ -45,9 +58,117 @@ Ver guia completo: [`deploy/SETUP_NOVO_EC2.md`](deploy/SETUP_NOVO_EC2.md)
 - [Quick Reference](deploy/QUICK_REFERENCE.md) - Comandos úteis
 
 ### Documentação Técnica
-- [Cálculos de Ranking](docs/CALCULOS_RANKING.md) - Metodologia de scoring
+- [Cálculos de Ranking](docs/CALCULOS_RANKING.md) - Metodologia de scoring completa
+- [Backtest e Suavização](docs/BACKTEST_SMOOTHING.md) - Backtest e suavização temporal
+- [Melhorias Acadêmicas](docs/MELHORIAS_ACADEMICAS.md) - Todas as melhorias v2.2.0-2.5.0
+- [Missing Values](docs/MISSING_VALUE_TREATMENT.md) - Tratamento de valores ausentes
 - [Pipeline Inteligente](docs/PIPELINE_INTELIGENTE.md) - Funcionamento do pipeline
 - [Chat Gemini](docs/CHAT_GEMINI.md) - Assistente de IA
+- [Resumo v2.2.0-2.4.0](docs/SUMMARY_V2.2.0.md) - Resumo das melhorias
+
+### Guias de Uso
+- [Guia de Uso](docs/GUIA_USO.md) - Como usar o sistema
+- [Docker](docs/DOCKER.md) - Guia Docker
+- [Índice de Documentação](docs/INDEX.md) - Índice completo
+
+## 📊 Métricas e Performance
+
+### Backtest
+Execute backtests para avaliar estratégias:
+```bash
+# Backtest básico (último ano, Top 10, equal weight)
+docker exec quant-ranker-backend python scripts/run_backtest.py --save
+
+# Backtest customizado
+docker exec quant-ranker-backend python scripts/run_backtest.py \
+    --start-date 2024-01-01 \
+    --top-n 20 \
+    --weight-method score_weighted \
+    --use-smoothing \
+    --save
+```
+
+Métricas calculadas:
+- **CAGR**: Retorno anualizado composto
+- **Sharpe Ratio**: Retorno ajustado ao risco
+- **Maximum Drawdown**: Maior queda desde o pico
+- **Volatilidade**: Desvio padrão anualizado
+- **Turnover**: Mudança média do portfólio
+
+### Suavização Temporal
+Reduza turnover com suavização exponencial:
+```bash
+# Aplicar suavização a todos os scores
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+
+# Customizar alpha (0.7 = 70% atual, 30% anterior)
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --alpha 0.8
+```
+
+## 🔧 Configuração
+
+### Pesos dos Fatores (.env)
+```env
+MOMENTUM_WEIGHT=0.35  # 35%
+QUALITY_WEIGHT=0.25   # 25%
+VALUE_WEIGHT=0.30     # 30%
+SIZE_WEIGHT=0.10      # 10%
+# Total = 1.00 (100%)
+```
+
+### Perfis de Investimento
+
+**Balanceado (Padrão)**:
+```env
+MOMENTUM_WEIGHT=0.35
+QUALITY_WEIGHT=0.25
+VALUE_WEIGHT=0.30
+SIZE_WEIGHT=0.10
+```
+
+**Conservador (Quality)**:
+```env
+MOMENTUM_WEIGHT=0.20
+QUALITY_WEIGHT=0.50
+VALUE_WEIGHT=0.30
+SIZE_WEIGHT=0.00
+```
+
+**Agressivo (Momentum + Size)**:
+```env
+MOMENTUM_WEIGHT=0.50
+QUALITY_WEIGHT=0.15
+VALUE_WEIGHT=0.20
+SIZE_WEIGHT=0.15
+```
+
+## 🔄 Pipeline e Manutenção
+
+### Executar Pipeline
+```bash
+# Modo test (5 ativos)
+docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode test
+
+# Modo liquid (50 ativos mais líquidos)
+docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
+```
+
+### Migrações (Primeira Vez)
+```bash
+# 1. Momentum acadêmico
+docker exec quant-ranker-backend python scripts/migrate_add_academic_momentum.py
+
+# 2. VALUE e SIZE
+docker exec quant-ranker-backend python scripts/migrate_add_value_size_factors.py
+
+# 3. Backtest e suavização
+docker exec quant-ranker-backend python scripts/migrate_add_backtest_smoothing.py
+
+# 4. Aplicar suavização
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+```
+
+## 📚 Documentação Completa
 - [Docker](docs/DOCKER.md) - Configuração Docker
 - [MCP Server](docs/MCP_SERVER.md) - Servidor MCP
 - [Guia de Uso](docs/GUIA_USO.md) - Como usar o sistema

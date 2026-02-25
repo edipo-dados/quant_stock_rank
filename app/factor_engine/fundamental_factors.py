@@ -585,6 +585,160 @@ class FundamentalFactorCalculator:
         except (TypeError, ZeroDivisionError) as e:
             raise CalculationError(f"Error calculating P/B ratio: {e}")
     
+    def calculate_price_to_book(self, fundamentals: Dict) -> float:
+        """
+        Calcula razão Price-to-Book usando market cap e shareholders equity.
+        
+        Price-to-Book = Market Cap / Shareholders Equity
+        
+        Args:
+            fundamentals: Dict contendo market_cap e shareholders_equity
+            
+        Returns:
+            Razão Price-to-Book como float
+            
+        Raises:
+            InsufficientDataError: Se dados necessários estão faltando
+            CalculationError: Se shareholders equity é zero ou negativo
+        """
+        try:
+            market_cap = fundamentals.get('market_cap')
+            shareholders_equity = fundamentals.get('shareholders_equity')
+            
+            if market_cap is None or shareholders_equity is None:
+                raise InsufficientDataError(
+                    "Missing market_cap or shareholders_equity for Price-to-Book calculation"
+                )
+            
+            if shareholders_equity <= 0:
+                raise CalculationError(
+                    f"Invalid shareholders equity for Price-to-Book: {shareholders_equity}"
+                )
+            
+            return market_cap / shareholders_equity
+            
+        except (TypeError, ZeroDivisionError) as e:
+            raise CalculationError(f"Error calculating Price-to-Book: {e}")
+    
+    def calculate_fcf_yield(self, fundamentals: Dict) -> float:
+        """
+        Calcula FCF Yield (Free Cash Flow Yield).
+        
+        FCF Yield = Free Cash Flow / Market Cap
+        
+        Args:
+            fundamentals: Dict contendo free_cash_flow e market_cap
+            
+        Returns:
+            FCF Yield como float (percentual)
+            
+        Raises:
+            InsufficientDataError: Se dados necessários estão faltando
+            CalculationError: Se market cap é zero ou negativo
+        """
+        try:
+            free_cash_flow = fundamentals.get('free_cash_flow')
+            market_cap = fundamentals.get('market_cap')
+            
+            if free_cash_flow is None or market_cap is None:
+                raise InsufficientDataError(
+                    "Missing free_cash_flow or market_cap for FCF Yield calculation"
+                )
+            
+            if market_cap <= 0:
+                raise CalculationError(
+                    f"Invalid market cap for FCF Yield: {market_cap}"
+                )
+            
+            return free_cash_flow / market_cap
+            
+        except (TypeError, ZeroDivisionError) as e:
+            raise CalculationError(f"Error calculating FCF Yield: {e}")
+    
+    def calculate_ev_ebitda_from_components(self, fundamentals: Dict) -> float:
+        """
+        Calcula EV/EBITDA a partir dos componentes.
+        
+        EV = Market Cap + Total Debt - Cash
+        EV/EBITDA = EV / EBITDA
+        
+        Args:
+            fundamentals: Dict contendo market_cap, total_debt, cash, ebitda
+            
+        Returns:
+            Razão EV/EBITDA como float
+            
+        Raises:
+            InsufficientDataError: Se dados necessários estão faltando
+            CalculationError: Se EBITDA é zero ou negativo
+        """
+        try:
+            market_cap = fundamentals.get('market_cap')
+            total_debt = fundamentals.get('total_debt', 0)  # Default 0 se não tiver dívida
+            cash = fundamentals.get('cash', 0)  # Default 0 se não tiver cash
+            ebitda = fundamentals.get('ebitda')
+            
+            if market_cap is None or ebitda is None:
+                raise InsufficientDataError(
+                    "Missing market_cap or ebitda for EV/EBITDA calculation"
+                )
+            
+            if ebitda <= 0:
+                raise CalculationError(
+                    f"Invalid EBITDA for EV/EBITDA: {ebitda}"
+                )
+            
+            # Calcular Enterprise Value
+            enterprise_value = market_cap + total_debt - cash
+            
+            return enterprise_value / ebitda
+            
+        except (TypeError, ZeroDivisionError) as e:
+            raise CalculationError(f"Error calculating EV/EBITDA from components: {e}")
+    
+    def calculate_size_factor(self, fundamentals: Dict) -> float:
+        """
+        Calcula fator SIZE (tamanho da empresa).
+        
+        Size Factor = -log(Market Cap)
+        
+        O sinal negativo é porque empresas menores tendem a ter retornos maiores
+        (size premium). Assim, valores mais altos do fator indicam empresas menores.
+        
+        Args:
+            fundamentals: Dict contendo market_cap
+            
+        Returns:
+            Size factor como float
+            
+        Raises:
+            InsufficientDataError: Se market_cap está faltando
+            CalculationError: Se market_cap é zero ou negativo
+        """
+        try:
+            import math
+            
+            market_cap = fundamentals.get('market_cap')
+            
+            if market_cap is None:
+                raise InsufficientDataError(
+                    "Missing market_cap for size factor calculation"
+                )
+            
+            if market_cap <= 0:
+                raise CalculationError(
+                    f"Invalid market cap for size factor: {market_cap}"
+                )
+            
+            # Size factor = -log(market_cap)
+            # Empresas menores terão valores maiores (mais positivos)
+            size_factor = -math.log(market_cap)
+            
+            return size_factor
+            
+        except (TypeError, ValueError) as e:
+            raise CalculationError(f"Error calculating size factor: {e}")
+    
     def calculate_all_factors(
         self,
         ticker: str,
@@ -920,5 +1074,46 @@ class FundamentalFactorCalculator:
         else:
             logger.warning(f"No price provided for P/B calculation for {ticker}")
             factors['pb_ratio'] = None
+        
+        # Price-to-Book (usando market cap)
+        try:
+            factors['price_to_book'] = self.calculate_price_to_book(fundamentals_data)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate Price-to-Book for {ticker}: {e}")
+            factors['price_to_book'] = None
+        
+        # FCF Yield
+        try:
+            factors['fcf_yield'] = self.calculate_fcf_yield(fundamentals_data)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate FCF Yield for {ticker}: {e}")
+            factors['fcf_yield'] = None
+        
+        # EV/EBITDA (tentar calcular a partir de componentes se não tiver enterprise_value)
+        if fundamentals_data.get('enterprise_value') is not None:
+            try:
+                factors['ev_ebitda'] = self.calculate_ev_ebitda(fundamentals_data)
+            except (InsufficientDataError, CalculationError) as e:
+                logger.warning(f"Could not calculate EV/EBITDA for {ticker}: {e}")
+                # Tentar calcular a partir de componentes
+                try:
+                    factors['ev_ebitda'] = self.calculate_ev_ebitda_from_components(fundamentals_data)
+                except (InsufficientDataError, CalculationError) as e2:
+                    logger.warning(f"Could not calculate EV/EBITDA from components for {ticker}: {e2}")
+                    factors['ev_ebitda'] = None
+        else:
+            # Calcular a partir de componentes
+            try:
+                factors['ev_ebitda'] = self.calculate_ev_ebitda_from_components(fundamentals_data)
+            except (InsufficientDataError, CalculationError) as e:
+                logger.warning(f"Could not calculate EV/EBITDA from components for {ticker}: {e}")
+                factors['ev_ebitda'] = None
+        
+        # Size Factor
+        try:
+            factors['size_factor'] = self.calculate_size_factor(fundamentals_data)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate size factor for {ticker}: {e}")
+            factors['size_factor'] = None
         
         return factors

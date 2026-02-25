@@ -127,9 +127,12 @@ class FeatureDaily(Base):
     date = Column(Date, nullable=False, index=True)
     
     # Momentum Factors (normalized)
+    return_1m = Column(Float)  # Retorno 1 mês (para cálculo de momentum ex-1m)
     return_6m = Column(Float)
     return_12m = Column(Float)
-    rsi_14 = Column(Float)
+    momentum_6m_ex_1m = Column(Float)  # Momentum 6m excluindo último mês (ACADÊMICO)
+    momentum_12m_ex_1m = Column(Float)  # Momentum 12m excluindo último mês (ACADÊMICO)
+    rsi_14 = Column(Float)  # Mantido para compatibilidade, mas não usado no score
     volatility_90d = Column(Float)
     recent_drawdown = Column(Float)
     
@@ -165,6 +168,13 @@ class FeatureMonthly(Base):
     ev_ebitda = Column(Float)
     pb_ratio = Column(Float)
     
+    # Expanded VALUE factors
+    price_to_book = Column(Float)  # Price-to-Book usando market cap
+    fcf_yield = Column(Float)  # Free Cash Flow Yield
+    
+    # SIZE factor
+    size_factor = Column(Float)  # -log(market_cap) para size premium
+    
     # Robustness fields (added for scoring improvements)
     roe_mean_3y = Column(Float)
     roe_volatility = Column(Float)
@@ -197,6 +207,7 @@ class ScoreDaily(Base):
     
     # Scores
     final_score = Column(Float, nullable=False)
+    final_score_smoothed = Column(Float)  # Score suavizado temporalmente (0.7*current + 0.3*previous)
     momentum_score = Column(Float, nullable=False)
     quality_score = Column(Float, nullable=False)
     value_score = Column(Float, nullable=False)
@@ -275,3 +286,88 @@ class PipelineExecution(Base):
     
     def __repr__(self):
         return f"<PipelineExecution(id={self.id}, type={self.execution_type}, status={self.status}, date={self.execution_date})>"
+
+
+class RankingHistory(Base):
+    """
+    Tabela para armazenar histórico de rankings para backtest.
+    
+    Armazena snapshots mensais do ranking para análise de performance
+    e cálculo de métricas de backtest.
+    """
+    __tablename__ = "ranking_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, nullable=False, index=True)  # Data do snapshot (último dia útil do mês)
+    ticker = Column(String(10), nullable=False, index=True)
+    
+    # Scores
+    final_score = Column(Float, nullable=False)
+    final_score_smoothed = Column(Float)  # Score suavizado temporalmente
+    momentum_score = Column(Float, nullable=False)
+    quality_score = Column(Float, nullable=False)
+    value_score = Column(Float, nullable=False)
+    
+    # Ranking
+    rank = Column(Integer, nullable=False)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    __table_args__ = (
+        UniqueConstraint('date', 'ticker', name='uix_date_ticker_history'),
+        Index('idx_date_rank_history', 'date', 'rank'),
+    )
+    
+    def __repr__(self):
+        return f"<RankingHistory(date={self.date}, ticker={self.ticker}, rank={self.rank})>"
+
+
+class BacktestResult(Base):
+    """
+    Tabela para armazenar resultados de backtests.
+    
+    Armazena métricas de performance de estratégias testadas.
+    """
+    __tablename__ = "backtest_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Identificação do backtest
+    backtest_name = Column(String(100), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    
+    # Parâmetros da estratégia
+    top_n = Column(Integer, nullable=False)  # Número de ativos selecionados
+    rebalance_frequency = Column(String(20), nullable=False)  # 'monthly', 'quarterly'
+    weight_method = Column(String(20), nullable=False)  # 'equal', 'score_weighted'
+    use_smoothing = Column(Boolean, default=False)  # Se usa suavização temporal
+    
+    # Métricas de Performance
+    total_return = Column(Float)  # Retorno total (%)
+    cagr = Column(Float)  # Compound Annual Growth Rate (%)
+    volatility = Column(Float)  # Volatilidade anualizada (%)
+    sharpe_ratio = Column(Float)  # Sharpe Ratio
+    max_drawdown = Column(Float)  # Maximum Drawdown (%)
+    avg_turnover = Column(Float)  # Turnover médio por rebalanceamento (%)
+    
+    # Estatísticas adicionais
+    num_rebalances = Column(Integer)  # Número de rebalanceamentos
+    num_trades = Column(Integer)  # Número total de trades
+    win_rate = Column(Float)  # Taxa de acerto (%)
+    
+    # Dados detalhados
+    monthly_returns = Column(JSON)  # Lista de retornos mensais
+    portfolio_history = Column(JSON)  # Histórico de composição do portfólio
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    config_snapshot = Column(JSON)  # Snapshot da configuração usada
+    
+    __table_args__ = (
+        Index('idx_backtest_name_date', 'backtest_name', 'start_date', 'end_date'),
+    )
+    
+    def __repr__(self):
+        return f"<BacktestResult(name={self.backtest_name}, cagr={self.cagr:.2f}%, sharpe={self.sharpe_ratio:.2f})>"

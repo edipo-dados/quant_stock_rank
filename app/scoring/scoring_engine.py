@@ -73,20 +73,21 @@ class ScoringEngine:
         self.momentum_weight = config.momentum_weight
         self.quality_weight = config.quality_weight
         self.value_weight = config.value_weight
+        self.size_weight = config.size_weight
         
-        # Validar que pesos somam aproximadamente 1.0
-        total_weight = self.momentum_weight + self.quality_weight + self.value_weight
+        # Validar que pesos somam aproximadamente 1.0 (se size_weight = 0)
+        total_weight = self.momentum_weight + self.quality_weight + self.value_weight + self.size_weight
         if abs(total_weight - 1.0) > 0.01:
             logger.warning(
                 f"Weights do not sum to 1.0: momentum={self.momentum_weight}, "
                 f"quality={self.quality_weight}, value={self.value_weight}, "
-                f"total={total_weight}"
+                f"size={self.size_weight}, total={total_weight}"
             )
         
         logger.info(
             f"ScoringEngine initialized with weights: "
             f"momentum={self.momentum_weight}, quality={self.quality_weight}, "
-            f"value={self.value_weight}"
+            f"value={self.value_weight}, size={self.size_weight}"
         )
     
     def calculate_momentum_score(self, factors: Dict[str, float]) -> float:
@@ -95,12 +96,18 @@ class ScoringEngine:
         
         Score de momentum = média dos fatores de momentum normalizados.
         
-        Fatores considerados:
-        - return_6m: Retorno de 6 meses (positivo é melhor)
-        - return_12m: Retorno de 12 meses (positivo é melhor)
-        - rsi_14: RSI de 14 períodos (valores moderados são melhores)
+        Fatores considerados (METODOLOGIA ACADÊMICA):
+        - momentum_6m_ex_1m: Retorno de 6 meses excluindo último mês (positivo é melhor)
+        - momentum_12m_ex_1m: Retorno de 12 meses excluindo último mês (positivo é melhor)
         - volatility_90d: Volatilidade de 90 dias (INVERTIDO - menor é melhor)
         - recent_drawdown: Drawdown recente (INVERTIDO - menor é melhor)
+        
+        NOTA: RSI foi removido conforme metodologia acadêmica.
+        Momentum exclui último mês para evitar reversão de curto prazo.
+        
+        TRATAMENTO DE MISSING:
+        - Se fatores críticos (momentum_6m_ex_1m, momentum_12m_ex_1m) ausentes: score muito baixo
+        - Fatores secundários (volatility, drawdown) ausentes: usa apenas disponíveis
         
         Args:
             factors: Dicionário com fatores normalizados
@@ -115,22 +122,37 @@ class ScoringEngine:
         """
         import math
         
-        required_factors = ['return_6m', 'return_12m', 'rsi_14', 'volatility_90d', 'recent_drawdown']
+        # Fatores críticos (momentum)
+        critical_factors = ['momentum_6m_ex_1m', 'momentum_12m_ex_1m']
+        # Fatores secundários (risco)
+        secondary_factors = ['volatility_90d', 'recent_drawdown']
         
-        # Coleta fatores disponíveis (não None e não NaN)
+        # Coleta fatores disponíveis
         momentum_factors = []
-        for factor_name in required_factors:
-            value = factors.get(factor_name)
-            # Verificar se o valor é válido (não None e não NaN)
-            if value is not None and not (isinstance(value, float) and math.isnan(value)):
-                if factor_name in ['volatility_90d', 'recent_drawdown']:
-                    momentum_factors.append(-value)  # Invertido
-                else:
-                    momentum_factors.append(value)
+        missing_critical = []
         
-        # Se nenhum fator disponível, retorna 0
+        # Verificar fatores críticos
+        for factor_name in critical_factors:
+            value = factors.get(factor_name)
+            if value is not None and not (isinstance(value, float) and math.isnan(value)):
+                momentum_factors.append(value)
+            else:
+                missing_critical.append(factor_name)
+        
+        # Se fatores críticos estão ausentes, retorna score muito baixo
+        if missing_critical:
+            logger.warning(f"Critical momentum factors missing: {missing_critical}")
+            return -999.0
+        
+        # Adicionar fatores secundários se disponíveis
+        for factor_name in secondary_factors:
+            value = factors.get(factor_name)
+            if value is not None and not (isinstance(value, float) and math.isnan(value)):
+                momentum_factors.append(-value)  # Invertido - menor é melhor
+        
+        # Se nenhum fator disponível, retorna score muito baixo
         if not momentum_factors:
-            return 0.0
+            return -999.0
         
         # Calcular média dos fatores disponíveis
         momentum_score = sum(momentum_factors) / len(momentum_factors)
@@ -150,17 +172,15 @@ class ScoringEngine:
         - revenue_growth_3y: Crescimento de receita 3 anos (positivo é melhor)
         - debt_to_ebitda: Dívida/EBITDA (INVERTIDO - menor é melhor)
         
-        Penalidades:
-        - Se net_income_last_year < 0: quality_score *= 0.4
-        - Penalização progressiva de endividamento:
-          - debt_to_ebitda > 3: penalização leve (0.9)
-          - debt_to_ebitda > 5: penalização forte (0.7)
+        NOTA: Penalidades fixas foram removidas. O risco é capturado diretamente
+        pelos fatores normalizados (debt_to_ebitda, net_income_last_year já estão
+        no score como fatores negativos quando ruins).
         
         Args:
             factors: Dicionário com fatores normalizados
             
         Returns:
-            Score de qualidade (média dos fatores com penalidades aplicadas)
+            Score de qualidade (média dos fatores)
             
         Raises:
             ValueError: Se todos os fatores obrigatórios estão faltando
@@ -173,6 +193,8 @@ class ScoringEngine:
         
         # Coleta fatores disponíveis (não None e não NaN)
         quality_factors = []
+        missing_critical = []
+        
         for factor_name in required_factors:
             value = factors.get(factor_name)
             # Verificar se o valor é válido (não None e não NaN)
@@ -181,26 +203,28 @@ class ScoringEngine:
                     quality_factors.append(-value)  # Invertido
                 else:
                     quality_factors.append(value)
+            else:
+                # Rastrear fatores críticos ausentes
+                if factor_name in ['roe_mean_3y', 'net_margin']:
+                    missing_critical.append(factor_name)
         
-        # Se nenhum fator disponível, retorna 0
+        # Se fatores críticos estão ausentes, retorna None para sinalizar exclusão
+        if missing_critical:
+            logger.warning(f"Critical quality factors missing: {missing_critical}")
+            # Retorna score muito baixo em vez de None para não quebrar o sistema
+            return -999.0
+        
+        # Se nenhum fator disponível, retorna score muito baixo
         if not quality_factors:
-            return 0.0
+            return -999.0
         
         # Calcular média dos fatores disponíveis
         quality_score = sum(quality_factors) / len(quality_factors)
         
-        # Aplicar penalidade por prejuízo recente
-        net_income_last_year = factors.get('net_income_last_year')
-        if net_income_last_year is not None and not (isinstance(net_income_last_year, float) and math.isnan(net_income_last_year)) and net_income_last_year < 0:
-            quality_score *= 0.4
-        
-        # Aplicar penalização progressiva de endividamento
-        debt_to_ebitda_raw = factors.get('debt_to_ebitda_raw')  # Valor não normalizado
-        if debt_to_ebitda_raw is not None and not (isinstance(debt_to_ebitda_raw, float) and math.isnan(debt_to_ebitda_raw)):
-            if debt_to_ebitda_raw > 5:
-                quality_score *= 0.7  # Penalização forte
-            elif debt_to_ebitda_raw > 3:
-                quality_score *= 0.9  # Penalização leve
+        # REMOVIDO: Penalidades fixas por prejuízo e endividamento
+        # O risco já está capturado nos fatores normalizados:
+        # - net_income_last_year negativo resulta em score baixo naturalmente
+        # - debt_to_ebitda alto resulta em score baixo naturalmente (invertido)
         
         return quality_score
     
@@ -301,16 +325,22 @@ class ScoringEngine:
         
         Score de valor = média dos fatores de valor normalizados.
         
-        Fatores considerados (todos invertidos - menor é melhor):
+        Fatores considerados (EXPANDIDO):
         - pe_ratio: P/L (INVERTIDO - menor é melhor)
         - ev_ebitda: EV/EBITDA (INVERTIDO - menor é melhor)
-        - pb_ratio: P/VP (INVERTIDO - menor é melhor)
+        - price_to_book: Price-to-Book (INVERTIDO - menor é melhor)
+        - fcf_yield: FCF Yield (positivo é melhor - maior yield é melhor)
+        - debt_to_ebitda: Dívida/EBITDA (INVERTIDO - menor é melhor)
+        
+        TRATAMENTO DE MISSING:
+        - Se fatores críticos (pe_ratio, price_to_book) ausentes: score muito baixo
+        - Fatores secundários ausentes: usa apenas disponíveis
         
         Args:
             factors: Dicionário com fatores normalizados
             
         Returns:
-            Score de valor (média dos fatores invertidos)
+            Score de valor (média dos fatores)
             
         Raises:
             ValueError: Se todos os fatores obrigatórios estão faltando
@@ -319,42 +349,97 @@ class ScoringEngine:
         """
         import math
         
-        required_factors = ['pe_ratio', 'ev_ebitda', 'pb_ratio']
+        # Fatores críticos
+        critical_factors = ['pe_ratio', 'price_to_book']
+        # Fatores secundários
+        secondary_factors = ['ev_ebitda', 'fcf_yield', 'debt_to_ebitda']
         
-        # Coleta fatores disponíveis (não None e não NaN)
+        # Coleta fatores disponíveis
         value_factors = []
-        for factor_name in required_factors:
-            value = factors.get(factor_name)
-            # Verificar se o valor é válido (não None e não NaN)
-            if value is not None and not (isinstance(value, float) and math.isnan(value)):
-                value_factors.append(-value)  # Invertido
+        missing_critical = []
         
-        # Se nenhum fator disponível, retorna 0
+        # Verificar fatores críticos
+        for factor_name in critical_factors:
+            value = factors.get(factor_name)
+            if value is not None and not (isinstance(value, float) and math.isnan(value)):
+                value_factors.append(-value)  # Invertido - menor é melhor
+            else:
+                missing_critical.append(factor_name)
+        
+        # Se fatores críticos estão ausentes, retorna score muito baixo
+        if missing_critical:
+            logger.warning(f"Critical value factors missing: {missing_critical}")
+            return -999.0
+        
+        # Adicionar fatores secundários se disponíveis
+        for factor_name in secondary_factors:
+            value = factors.get(factor_name)
+            if value is not None and not (isinstance(value, float) and math.isnan(value)):
+                if factor_name == 'fcf_yield':
+                    value_factors.append(value)  # FCF Yield: maior é melhor
+                else:
+                    value_factors.append(-value)  # Outros: invertido - menor é melhor
+        
+        # Se nenhum fator disponível, retorna score muito baixo
         if not value_factors:
-            return 0.0
+            return -999.0
         
         # Calcular média dos fatores disponíveis
         value_score = sum(value_factors) / len(value_factors)
         
         return value_score
     
+    def calculate_size_score(self, factors: Dict[str, float]) -> float:
+        """
+        Calcula score de tamanho (size premium).
+        
+        Size Score = size_factor normalizado
+        
+        O size_factor é calculado como -log(market_cap), então:
+        - Empresas menores têm valores maiores (mais positivos)
+        - Empresas maiores têm valores menores (mais negativos)
+        
+        Após normalização cross-sectional, valores positivos indicam
+        empresas menores que a média (size premium).
+        
+        Args:
+            factors: Dicionário com fatores normalizados
+            
+        Returns:
+            Score de tamanho (size_factor normalizado)
+        """
+        import math
+        
+        size_factor = factors.get('size_factor')
+        
+        # Verificar se o valor é válido (não None e não NaN)
+        if size_factor is None or (isinstance(size_factor, float) and math.isnan(size_factor)):
+            return 0.0
+        
+        # Size factor já está normalizado e com sinal correto
+        # Valores positivos = empresas menores = size premium
+        return size_factor
+    
     def calculate_final_score(
         self, 
         momentum_score: float,
         quality_score: float,
-        value_score: float
+        value_score: float,
+        size_score: float = 0.0
     ) -> float:
         """
-        Calcula score final como média ponderada dos três scores.
+        Calcula score final como média ponderada dos scores.
         
         final_score = (momentum_weight * momentum_score +
                       quality_weight * quality_score +
-                      value_weight * value_score)
+                      value_weight * value_score +
+                      size_weight * size_score)
         
         Args:
             momentum_score: Score de momentum
             quality_score: Score de qualidade
             value_score: Score de valor
+            size_score: Score de tamanho (opcional, default 0.0)
             
         Returns:
             Score final ponderado
@@ -364,7 +449,8 @@ class ScoringEngine:
         final_score = (
             self.momentum_weight * momentum_score +
             self.quality_weight * quality_score +
-            self.value_weight * value_score
+            self.value_weight * value_score +
+            self.size_weight * size_score
         )
         
         return final_score
@@ -386,9 +472,9 @@ class ScoringEngine:
             ticker: Símbolo do ativo
             fundamental_factors: Dicionário com fatores fundamentalistas normalizados
                                 (roe, net_margin, revenue_growth_3y, debt_to_ebitda,
-                                 pe_ratio, ev_ebitda, pb_ratio)
+                                 pe_ratio, ev_ebitda, pb_ratio, price_to_book, fcf_yield, size_factor)
             momentum_factors: Dicionário com fatores de momentum normalizados
-                            (return_6m, return_12m, rsi_14, volatility_90d, recent_drawdown)
+                            (momentum_6m_ex_1m, momentum_12m_ex_1m, volatility_90d, recent_drawdown)
             confidence: Score de confiança (0-1), default 0.5
             
         Returns:
@@ -406,9 +492,10 @@ class ScoringEngine:
         momentum_score = self.calculate_momentum_score(momentum_factors)
         quality_score = self.calculate_quality_score(fundamental_factors)
         value_score = self.calculate_value_score(fundamental_factors)
+        size_score = self.calculate_size_score(fundamental_factors)
         
         # Calcular score final
-        final_score = self.calculate_final_score(momentum_score, quality_score, value_score)
+        final_score = self.calculate_final_score(momentum_score, quality_score, value_score, size_score)
         
         # Criar resultado
         result = ScoreResult(
@@ -424,7 +511,7 @@ class ScoringEngine:
         logger.debug(
             f"Scored {ticker}: final={final_score:.3f}, "
             f"momentum={momentum_score:.3f}, quality={quality_score:.3f}, "
-            f"value={value_score:.3f}"
+            f"value={value_score:.3f}, size={size_score:.3f}"
         )
         
         return result

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     momentum_weight: float = 0.4
     quality_weight: float = 0.3
     value_weight: float = 0.3
+    size_weight: float = 0.0  # Size premium weight (0.0 = disabled, 0.1 = 10%)
     
     # Eligibility Filter Parameters
     minimum_volume: float = 100000  # Minimum average daily volume

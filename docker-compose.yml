@@ -42,9 +42,10 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-quant_user}:${POSTGRES_PASSWORD:-quant_password}@postgres:5432/${POSTGRES_DB:-quant_ranker}
       
       # Scoring Weights
-      MOMENTUM_WEIGHT: ${MOMENTUM_WEIGHT:-0.4}
-      QUALITY_WEIGHT: ${QUALITY_WEIGHT:-0.3}
-      VALUE_WEIGHT: ${VALUE_WEIGHT:-0.3}
+      MOMENTUM_WEIGHT: ${MOMENTUM_WEIGHT:-0.35}
+      QUALITY_WEIGHT: ${QUALITY_WEIGHT:-0.25}
+      VALUE_WEIGHT: ${VALUE_WEIGHT:-0.30}
+      SIZE_WEIGHT: ${SIZE_WEIGHT:-0.10}
       
       # API Configuration
       API_HOST: ${API_HOST:-0.0.0.0}

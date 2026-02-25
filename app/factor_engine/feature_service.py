@@ -75,7 +75,8 @@ class FeatureService:
         Args:
             ticker: Símbolo do ativo
             feature_date: Data das features
-            features: Dict com chaves: return_6m, return_12m, rsi_14,
+            features: Dict com chaves: return_1m, return_6m, return_12m, 
+                     momentum_6m_ex_1m, momentum_12m_ex_1m, rsi_14,
                      volatility_90d, recent_drawdown
         
         Returns:
@@ -98,8 +99,11 @@ class FeatureService:
             
             if existing:
                 # Atualiza registro existente
+                existing.return_1m = features_converted.get('return_1m')
                 existing.return_6m = features_converted.get('return_6m')
                 existing.return_12m = features_converted.get('return_12m')
+                existing.momentum_6m_ex_1m = features_converted.get('momentum_6m_ex_1m')
+                existing.momentum_12m_ex_1m = features_converted.get('momentum_12m_ex_1m')
                 existing.rsi_14 = features_converted.get('rsi_14')
                 existing.volatility_90d = features_converted.get('volatility_90d')
                 existing.recent_drawdown = features_converted.get('recent_drawdown')
@@ -111,8 +115,11 @@ class FeatureService:
                 record = FeatureDaily(
                     ticker=ticker,
                     date=feature_date,
+                    return_1m=features_converted.get('return_1m'),
                     return_6m=features_converted.get('return_6m'),
                     return_12m=features_converted.get('return_12m'),
+                    momentum_6m_ex_1m=features_converted.get('momentum_6m_ex_1m'),
+                    momentum_12m_ex_1m=features_converted.get('momentum_12m_ex_1m'),
                     rsi_14=features_converted.get('rsi_14'),
                     volatility_90d=features_converted.get('volatility_90d'),
                     recent_drawdown=features_converted.get('recent_drawdown')
@@ -173,6 +180,9 @@ class FeatureService:
                 existing.pe_ratio = features_converted.get('pe_ratio')
                 existing.ev_ebitda = features_converted.get('ev_ebitda')
                 existing.pb_ratio = features_converted.get('pb_ratio')
+                existing.price_to_book = features_converted.get('price_to_book')
+                existing.fcf_yield = features_converted.get('fcf_yield')
+                existing.size_factor = features_converted.get('size_factor')
                 existing.roe_mean_3y = features_converted.get('roe_mean_3y')
                 existing.roe_volatility = features_converted.get('roe_volatility')
                 existing.debt_to_ebitda_raw = features_converted.get('debt_to_ebitda_raw')
@@ -193,6 +203,9 @@ class FeatureService:
                     pe_ratio=features_converted.get('pe_ratio'),
                     ev_ebitda=features_converted.get('ev_ebitda'),
                     pb_ratio=features_converted.get('pb_ratio'),
+                    price_to_book=features_converted.get('price_to_book'),
+                    fcf_yield=features_converted.get('fcf_yield'),
+                    size_factor=features_converted.get('size_factor'),
                     roe_mean_3y=features_converted.get('roe_mean_3y'),
                     roe_volatility=features_converted.get('roe_volatility'),
                     debt_to_ebitda_raw=features_converted.get('debt_to_ebitda_raw'),

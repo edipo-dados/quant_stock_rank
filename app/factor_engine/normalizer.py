@@ -374,6 +374,80 @@ class CrossSectionalNormalizer:
         
         return result
     
+    def impute_missing_with_sector_mean(
+        self,
+        factors_df: pd.DataFrame,
+        factor_columns: List[str],
+        sector_col: str = "sector"
+    ) -> pd.DataFrame:
+        """
+        Imputa valores ausentes usando média setorial.
+        
+        Para cada fator com valores ausentes:
+        1. Calcular média do setor para aquele fator
+        2. Substituir valores ausentes pela média setorial
+        3. Se setor não tem valores suficientes, usar média global
+        
+        Args:
+            factors_df: DataFrame com fatores e coluna de setor
+            factor_columns: Lista de colunas de fatores a imputar
+            sector_col: Nome da coluna de setor (default: "sector")
+            
+        Returns:
+            DataFrame com valores ausentes imputados
+            
+        Example:
+            >>> df = pd.DataFrame({
+            ...     'roe': [0.15, None, 0.10, 0.25, None],
+            ...     'sector': ['Tech', 'Tech', 'Finance', 'Finance', 'Finance']
+            ... }, index=['AAPL', 'MSFT', 'JPM', 'BAC', 'C'])
+            >>> normalizer = CrossSectionalNormalizer()
+            >>> imputed = normalizer.impute_missing_with_sector_mean(df, ['roe'], 'sector')
+            >>> # MSFT receberá média de Tech (0.15), C receberá média de Finance (0.175)
+        """
+        # Validar que as colunas existem
+        missing_cols = [col for col in factor_columns if col not in factors_df.columns]
+        if missing_cols:
+            raise ValueError(f"Columns not found in DataFrame: {missing_cols}")
+        
+        if sector_col not in factors_df.columns:
+            raise ValueError(f"Sector column '{sector_col}' not found in DataFrame")
+        
+        # Criar cópia para não modificar o original
+        imputed_df = factors_df.copy()
+        
+        # Imputar cada fator
+        for col in factor_columns:
+            # Pular se não há valores ausentes
+            if not imputed_df[col].isna().any():
+                continue
+            
+            # Calcular média global como fallback
+            global_mean = imputed_df[col].mean()
+            
+            # Imputar por setor
+            for sector in imputed_df[sector_col].unique():
+                # Máscara para ativos do setor
+                sector_mask = imputed_df[sector_col] == sector
+                
+                # Calcular média do setor (ignorando NaN)
+                sector_mean = imputed_df.loc[sector_mask, col].mean()
+                
+                # Se setor não tem valores válidos, usar média global
+                if pd.isna(sector_mean):
+                    sector_mean = global_mean
+                
+                # Imputar valores ausentes do setor
+                missing_mask = sector_mask & imputed_df[col].isna()
+                if missing_mask.any():
+                    imputed_df.loc[missing_mask, col] = sector_mean
+                    logger.debug(
+                        f"Imputed {missing_mask.sum()} missing values in '{col}' "
+                        f"for sector '{sector}' with mean {sector_mean:.4f}"
+                    )
+        
+        return imputed_df
+    
     def normalize_factors_sector_neutral(
         self,
         factors_df: pd.DataFrame,
@@ -382,7 +456,8 @@ class CrossSectionalNormalizer:
         min_sector_size: int = 5,
         winsorize: bool = True,
         lower_pct: float = 0.05,
-        upper_pct: float = 0.95
+        upper_pct: float = 0.95,
+        impute_missing: bool = True
     ) -> pd.DataFrame:
         """
         Normaliza fatores usando z-score setorial (sector-neutral).
@@ -391,9 +466,10 @@ class CrossSectionalNormalizer:
         Cada ativo é comparado apenas com seus pares do mesmo setor.
         
         Steps:
-        1. Aplicar winsorização (opcional)
-        2. Calcular z-score setorial para cada fator
-        3. Retornar DataFrame normalizado
+        1. Imputar valores ausentes com média setorial (opcional)
+        2. Aplicar winsorização (opcional)
+        3. Calcular z-score setorial para cada fator
+        4. Retornar DataFrame normalizado
         
         Args:
             factors_df: DataFrame com fatores e coluna de setor
@@ -403,6 +479,7 @@ class CrossSectionalNormalizer:
             winsorize: Se True, aplica winsorização antes (default: True)
             lower_pct: Percentil inferior para winsorização (default: 0.05)
             upper_pct: Percentil superior para winsorização (default: 0.95)
+            impute_missing: Se True, imputa valores ausentes com média setorial (default: True)
             
         Returns:
             DataFrame com fatores normalizados (z-scores setoriais)
@@ -432,7 +509,15 @@ class CrossSectionalNormalizer:
         # Criar cópia para não modificar o original
         processed_df = factors_df.copy()
         
-        # Step 1: Aplicar winsorização (se habilitado)
+        # Step 1: Imputar valores ausentes com média setorial (se habilitado)
+        if impute_missing:
+            processed_df = self.impute_missing_with_sector_mean(
+                processed_df,
+                factor_columns,
+                sector_col
+            )
+        
+        # Step 2: Aplicar winsorização (se habilitado)
         if winsorize:
             for col in factor_columns:
                 if processed_df[col].isna().all():
@@ -445,7 +530,7 @@ class CrossSectionalNormalizer:
                     upper_pct=upper_pct
                 )
         
-        # Step 2: Calcular z-score setorial para cada fator
+        # Step 3: Calcular z-score setorial para cada fator
         normalized_df = processed_df.copy()
         
         for col in factor_columns:
