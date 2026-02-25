@@ -30,6 +30,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
+      # Para EC2 com pouca memória (t2.micro/t2.small), use:
+      # dockerfile: docker/Dockerfile.backend.ec2
     container_name: quant-ranker-backend
     dns:
       - 8.8.8.8

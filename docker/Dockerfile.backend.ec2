@@ -1,0 +1,94 @@
+# Dockerfile otimizado para EC2
+# Com PostgreSQL e otimizações para build em ambientes com recursos limitados
+
+FROM python:3.11-slim
+
+# Definir diretório de trabalho
+WORKDIR /app
+
+# Instalar dependências do sistema necessárias
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    postgresql-client \
+    curl \
+    libpq-dev \
+    bash \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Atualizar pip, setuptools e wheel
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Copiar arquivo de dependências
+COPY requirements.txt .
+
+# Instalar dependências Python em etapas para evitar timeout
+# Instalar dependências críticas primeiro
+RUN pip install --no-cache-dir \
+    fastapi==0.109.0 \
+    uvicorn[standard]==0.27.0 \
+    pydantic==2.5.3 \
+    pydantic-settings==2.1.0
+
+# Instalar dependências de banco de dados
+RUN pip install --no-cache-dir \
+    sqlalchemy==2.0.25 \
+    psycopg2-binary==2.9.9 \
+    alembic==1.13.1
+
+# Instalar dependências de data processing
+RUN pip install --no-cache-dir \
+    pandas==2.2.0 \
+    numpy==1.26.3
+
+# Instalar dependências de data sources
+RUN pip install --no-cache-dir \
+    yfinance>=0.2.54 \
+    requests==2.31.0
+
+# Instalar dependências de frontend
+RUN pip install --no-cache-dir \
+    streamlit==1.30.0 \
+    plotly==5.18.0
+
+# Instalar dependências restantes
+RUN pip install --no-cache-dir \
+    pytest==7.4.4 \
+    pytest-asyncio==0.23.3 \
+    hypothesis==6.98.3 \
+    python-dotenv==1.0.0 \
+    python-multipart==0.0.6
+
+# Instalar MCP e Google Gemini
+RUN pip install --no-cache-dir \
+    mcp>=0.9.0 \
+    httpx>=0.27.0 \
+    google-genai>=0.2.0 \
+    duckduckgo-search>=6.0.0
+
+# Copiar código da aplicação
+COPY app/ ./app/
+COPY scripts/ ./scripts/
+
+# Tornar script executável
+RUN chmod +x /app/scripts/docker_init.sh && \
+    ls -la /app/scripts/docker_init.sh
+
+# Criar diretórios necessários
+RUN mkdir -p /app/logs
+
+# Expor porta da API
+EXPOSE 8000
+
+# Variáveis de ambiente padrão
+ENV PYTHONUNBUFFERED=1
+ENV API_HOST=0.0.0.0
+ENV API_PORT=8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+
+# Script de inicialização
+CMD ["bash", "/app/scripts/docker_init.sh"]
