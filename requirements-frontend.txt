@@ -15,5 +15,6 @@ numpy==1.26.3
 # Utilities
 python-dotenv==1.0.0
 
-# Pydantic (for API schemas)
+# Pydantic (for API schemas and config)
 pydantic==2.5.3
+pydantic-settings==2.1.0
