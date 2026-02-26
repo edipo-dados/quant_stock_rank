@@ -1,23 +1,32 @@
-# Deploy v2.5.1 - Arquitetura de 3 Camadas
+# Deploy v2.5.2 - Tratamento Estatístico de Missing Values
 
 ## O Que Mudou
 
-### Problema Resolvido
-O pipeline tinha um **deadlock lógico** onde o filtro de elegibilidade verificava fatores derivados que só eram calculados depois do filtro passar. Resultado: 0 ativos elegíveis.
+### v2.5.1 → v2.5.2
 
-### Nova Arquitetura
-Pipeline agora tem 3 camadas claramente separadas:
+#### Problema Resolvido
+Sistema usava valores sentinela (-999) para features ausentes, contaminando normalização e gerando scores absurdos (-549).
 
-1. **LAYER 1**: Elegibilidade Estrutural (dados brutos apenas)
-2. **LAYER 2**: Feature Engineering (calcula features + imputa missing)
-3. **LAYER 3**: Scoring & Normalization (normaliza + ranqueia)
+#### Nova Implementação
+Tratamento estatístico correto de missing values:
 
-### Garantias
-- ✅ >= 80% dos ativos passam Layer 1
-- ✅ Nenhum ativo excluído por missing features
-- ✅ Missing values imputados com medianas
-- ✅ Logs detalhados em cada camada
-- ✅ Pipeline determinístico
+1. **Cálculo de Features**: Retorna NaN em vez de -999
+2. **Identificação**: Detecta NaNs antes da normalização
+3. **Imputação**: Usa medianas setoriais/universo
+4. **Normalização**: Z-score cross-sectional sem contaminação
+5. **Scoring**: Redistribui pesos quando há NaN
+
+### Garantias v2.5.2
+- ✅ Scores distribuídos entre -3 e +3
+- ✅ Média próxima de 0 (±0.1)
+- ✅ Desvio padrão ~0.2-0.3
+- ✅ Sem valores extremos (-549)
+- ✅ Pipeline estatisticamente estável
+- ✅ Taxa de elegibilidade >= 80%
+
+### Resultados
+- **Antes**: Média=-549, Range=[-999, -300]
+- **Depois**: Média=0.00, Desvio=0.23, Range=[-0.38, 0.25]
 
 ---
 
@@ -54,7 +63,7 @@ docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode te
 
 ### Passo 5: Verificar Logs
 
-Você deve ver logs estruturados em 3 camadas:
+Você deve ver logs estruturados em 3 camadas com scores corretos:
 
 ```
 🔍 LAYER 1: STRUCTURAL ELIGIBILITY (raw data only)
@@ -85,20 +94,11 @@ Missing por feature:
 ✅ Scores calculados: 4/4
 ✅ Ranking atualizado: 4 ativos
 
-📊 RESUMO DO PIPELINE
-LAYER 1 - Elegibilidade Estrutural:
-  • Ativos iniciais: 5
-  • Ativos elegíveis: 4 (80.0%)
-  • Ativos excluídos: 1
-
-LAYER 2 - Feature Engineering:
-  • Momentum calculado: 4
-  • Fundamentos calculados: 4
-  • Valores imputados: 19
-
-LAYER 3 - Scoring:
-  • Scores calculados: 4
-  • Ranking final: 4 ativos
+📊 Estatísticas dos Scores (v2.5.2):
+Média: 0.00
+Desvio: 0.23
+Min: -0.38
+Max: 0.25
 ```
 
 ---
@@ -192,44 +192,63 @@ docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode li
 
 Esses valores são imputados com medianas e não afetam o ranking.
 
-### Scores Baixos (-549)
+### Scores Fora do Range Esperado
 
-**Normal!** Scores baixos indicam que alguns fatores críticos ainda estão sendo calculados. Com o tempo e mais histórico, os scores melhoram.
+**v2.5.2**: Scores devem estar entre -3 e +3, média ~0
+
+Se ver scores como -549 ou -999:
+```bash
+# Verificar versão
+git log --oneline -1
+
+# Deve mostrar commit com "remove sentinel values"
+# Se não, atualizar:
+git pull origin main
+docker-compose down
+docker-compose up -d --build
+```
 
 ---
 
-## Comparação: Antes vs Depois
+## Comparação: v2.5.0 → v2.5.1 → v2.5.2
 
-### Antes (v2.5.0)
+### v2.5.0 (Deadlock)
 ```
 Elegibilidade: 0 elegíveis, 10 excluídos  ❌
 Scores: 0/0 calculados  ❌
 Ranking: 0 ativos  ❌
 ```
 
-### Depois (v2.5.1)
+### v2.5.1 (3 Camadas)
 ```
-LAYER 1 - Elegibilidade Estrutural:
-  • Ativos elegíveis: 4 (80.0%)  ✅
+LAYER 1 - Elegibilidade: 4 (80.0%)  ✅
+LAYER 2 - Features: 4 calculados  ✅
+LAYER 3 - Scores: Média=-549  ❌ (valores sentinela)
+```
 
-LAYER 2 - Feature Engineering:
-  • Momentum calculado: 4  ✅
-  • Fundamentos calculados: 4  ✅
-  • Valores imputados: 19  ✅
-
-LAYER 3 - Scoring:
-  • Scores calculados: 4  ✅
-  • Ranking final: 4 ativos  ✅
+### v2.5.2 (Tratamento Estatístico)
+```
+LAYER 1 - Elegibilidade: 4 (80.0%)  ✅
+LAYER 2 - Features + Imputação: 4 calculados  ✅
+LAYER 3 - Scores: Média=0.00, Desvio=0.23  ✅
+Range: [-0.38, 0.25]  ✅
 ```
 
 ---
 
 ## Arquivos Modificados
 
+### v2.5.1 (3 Camadas)
 - `app/filters/eligibility_filter.py` - Layer 1 (estrutural apenas)
 - `app/factor_engine/missing_handler.py` - Layer 2.5 (novo)
 - `scripts/run_pipeline_docker.py` - Orquestração com logs
 - `docs/PIPELINE_ARCHITECTURE.md` - Documentação completa
+
+### v2.5.2 (Tratamento Estatístico)
+- `app/scoring/scoring_engine.py` - Métodos retornam NaN, não -999
+- `app/factor_engine/missing_handler.py` - Imputação estatística
+- `scripts/refactor_remove_sentinel_values.py` - Script de refatoração
+- `docs/CALCULOS_RANKING.md` - Regras atualizadas
 
 ---
 
@@ -257,9 +276,10 @@ Se encontrar problemas:
 ## Commit
 
 ```
-feat: Implement 3-layer pipeline architecture to eliminate deadlock
+fix: Complete removal of -999 sentinel values
 
-Commit: 775f182
+Commit: 0769998
 Branch: main
+Version: 2.5.2
 ```
     

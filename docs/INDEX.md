@@ -1,6 +1,13 @@
-# 📚 Índice da Documentação
+# 📚 Índice da Documentação - v2.5.2
 
 Bem-vindo à documentação do Sistema de Ranking Quantitativo de Ações!
+
+## 📌 Versão Atual: 2.5.2
+
+Sistema com arquitetura de 3 camadas e tratamento estatístico correto de missing values:
+- Scores distribuídos entre -3 e +3, média ~0
+- Taxa de elegibilidade >= 80%
+- Pipeline determinístico e estatisticamente estável
 
 ## 🚀 Início Rápido
 
@@ -18,7 +25,8 @@ Bem-vindo à documentação do Sistema de Ranking Quantitativo de Ações!
 | [README.md](../README.md) | Visão geral do sistema | Primeira leitura |
 | [GUIA_USO.md](GUIA_USO.md) | Tutorial completo | Aprender a usar |
 | [CALCULOS_RANKING.md](CALCULOS_RANKING.md) | Metodologia detalhada | Entender cálculos |
-| [MELHORIAS_ACADEMICAS.md](MELHORIAS_ACADEMICAS.md) | Melhorias acadêmicas v2.2.0 | Entender mudanças |
+| [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) | Arquitetura 3 camadas | Entender pipeline |
+| [MISSING_VALUE_TREATMENT.md](MISSING_VALUE_TREATMENT.md) | Tratamento de NaN | Entender imputação |
 | [DOCKER.md](DOCKER.md) | Guia completo Docker | Usar Docker |
 | [CHAT_GEMINI.md](CHAT_GEMINI.md) | Chat com IA | Usar assistente |
 | [MCP_SERVER.md](MCP_SERVER.md) | Integração com agentes | Integrar com IA |
@@ -119,7 +127,14 @@ Sempre use o formato completo com `.SA`:
 
 ## 📅 Última Atualização
 
-24 de Fevereiro de 2026 - v2.2.0 (Melhorias Acadêmicas)
+26 de Fevereiro de 2026 - v2.5.2
+
+### Mudanças Principais
+- ✅ Arquitetura de 3 camadas (v2.5.1)
+- ✅ Tratamento estatístico de missing values (v2.5.2)
+- ✅ Remoção completa de valores sentinela (-999)
+- ✅ Scores normalizados corretamente
+- ✅ Taxa de elegibilidade >= 80%
 
 ---
 

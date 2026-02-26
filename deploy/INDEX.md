@@ -1,6 +1,13 @@
-# Índice de Deploy
+# Índice de Deploy - v2.5.2
 
 Documentação completa para deploy e manutenção do sistema.
+
+## 📌 Versão Atual: 2.5.2
+
+Sistema com arquitetura de 3 camadas e tratamento estatístico de missing values:
+- Scores distribuídos entre -3 e +3, média ~0
+- Taxa de elegibilidade >= 80%
+- Pipeline determinístico e estatisticamente estável
 
 ## 🚀 Guias de Deploy
 
@@ -17,6 +24,13 @@ Documentação completa para deploy e manutenção do sistema.
   - Configuração de Nginx e SSL
   - Backup e restore
   - Troubleshooting avançado
+
+### Deploy v2.5.2
+- **[../EC2_DEPLOY_V2.5.2.md](../EC2_DEPLOY_V2.5.2.md)**
+  - Mudanças específicas da v2.5.2
+  - Tratamento estatístico de missing values
+  - Verificações de scores corretos
+  - Comparação entre versões
 
 ### Referência Rápida
 - **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)**

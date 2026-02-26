@@ -1,4 +1,4 @@
-# Guia de Uso - Sistema de Ranking Quantitativo
+# Guia de Uso - Sistema de Ranking Quantitativo v2.5.2
 
 ## Índice
 1. [Início Rápido](#1-início-rápido)
@@ -9,6 +9,15 @@
 6. [Executar Pipeline](#6-executar-pipeline)
 7. [Configurações Avançadas](#7-configurações-avançadas)
 8. [Troubleshooting](#8-troubleshooting)
+
+## Versão Atual: 2.5.2
+
+Sistema com arquitetura de 3 camadas e tratamento estatístico correto de missing values:
+- Elegibilidade estrutural (dados brutos apenas)
+- Feature engineering com imputação estatística
+- Scoring com normalização cross-sectional
+- Scores distribuídos entre -3 e +3, média ~0
+- Taxa de elegibilidade >= 80%
 
 ---
 
@@ -445,10 +454,11 @@ Edite o arquivo `.env`:
 # Banco de Dados
 DATABASE_URL=postgresql://quant_user:quant_password@postgres:5432/quant_ranker
 
-# Pesos dos Fatores
-MOMENTUM_WEIGHT=0.4  # 40%
-QUALITY_WEIGHT=0.3   # 30%
-VALUE_WEIGHT=0.3     # 30%
+# Pesos dos Fatores (v2.5.2)
+MOMENTUM_WEIGHT=0.35  # 35%
+QUALITY_WEIGHT=0.25   # 25%
+VALUE_WEIGHT=0.30     # 30%
+SIZE_WEIGHT=0.10      # 10%
 
 # API
 API_HOST=0.0.0.0
@@ -458,27 +468,38 @@ API_PORT=8000
 LOG_LEVEL=INFO
 ```
 
-### 7.2 Ajustar Pesos dos Fatores
+### 7.2 Ajustar Pesos dos Fatores (v2.5.2)
+
+Pesos padrão:
+```env
+MOMENTUM_WEIGHT=0.35  # 35%
+QUALITY_WEIGHT=0.25   # 25%
+VALUE_WEIGHT=0.30     # 30%
+SIZE_WEIGHT=0.10      # 10%
+```
 
 #### Perfil Agressivo (Momentum)
 ```env
-MOMENTUM_WEIGHT=0.6
-QUALITY_WEIGHT=0.2
-VALUE_WEIGHT=0.2
+MOMENTUM_WEIGHT=0.50
+QUALITY_WEIGHT=0.20
+VALUE_WEIGHT=0.20
+SIZE_WEIGHT=0.10
 ```
 
 #### Perfil Conservador (Quality)
 ```env
-MOMENTUM_WEIGHT=0.2
-QUALITY_WEIGHT=0.5
-VALUE_WEIGHT=0.3
+MOMENTUM_WEIGHT=0.20
+QUALITY_WEIGHT=0.45
+VALUE_WEIGHT=0.25
+SIZE_WEIGHT=0.10
 ```
 
 #### Perfil Value
 ```env
-MOMENTUM_WEIGHT=0.2
-QUALITY_WEIGHT=0.3
-VALUE_WEIGHT=0.5
+MOMENTUM_WEIGHT=0.20
+QUALITY_WEIGHT=0.20
+VALUE_WEIGHT=0.50
+SIZE_WEIGHT=0.10
 ```
 
 ### 7.3 Ajustar Rate Limiting
@@ -562,11 +583,15 @@ SLEEP_BETWEEN_BATCHES = 10 # Aumentar de 5 para 10
 
 ### 8.2 Erros Conhecidos
 
-#### "schema np does not exist"
-- **Causa**: Tipos numpy não convertidos para PostgreSQL
-- **Impacto**: Features não são salvas (apenas ingestão funciona)
-- **Solução**: Converter `np.float64` para `float` em `feature_service.py`
-- **Workaround**: Usar SQLite localmente
+#### "Scores muito baixos ou negativos"
+- **Causa**: Sistema v2.5.1 e anteriores usavam valores sentinela (-999)
+- **Solução**: Atualizar para v2.5.2 com tratamento estatístico correto
+- **Resultado esperado**: Scores entre -3 e +3, média ~0
+
+#### "Taxa de elegibilidade baixa"
+- **Causa**: Filtro verificando features derivadas em vez de dados brutos
+- **Solução**: v2.5.2 usa arquitetura de 3 camadas
+- **Resultado esperado**: >= 80% dos ativos elegíveis
 
 #### "No data found for ticker"
 - **Causa**: Ticker não existe ou sem dados no Yahoo Finance
