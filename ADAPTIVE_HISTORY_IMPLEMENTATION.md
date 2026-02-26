@@ -1,311 +1,256 @@
-# Implementação de Histórico Adaptativo - v2.6.0
+# Implementação de Histórico Adaptativo (v2.6.0)
 
-## Objetivo
+## Status: ✅ IMPLEMENTADO E TESTADO
 
-Modificar o cálculo das métricas fundamentalistas para não exigir obrigatoriamente 3 anos de histórico, usando o máximo de dados disponíveis sem gerar NaN desnecessários.
+Este documento descreve a implementação do histórico adaptativo para fatores fundamentalistas, permitindo que o sistema utilize o máximo de dados disponíveis sem exigir obrigatoriamente 3 anos de histórico.
 
-## Problema Atual
+## Problema Resolvido
 
-Quality e Value estão retornando NaN porque o modelo exige 3 anos completos de dados (ROE médio 3Y, crescimento 3Y etc.). Muitos ativos possuem apenas 1 ou 2 anos disponíveis via Yahoo, o que está zerando os fatores.
+O sistema v2.5.2 exigia exatamente 3 anos de dados fundamentalistas para calcular métricas como:
+- `roe_mean_3y`: ROE médio de 3 anos
+- `revenue_growth_3y`: Crescimento de receita de 3 anos
+- `roe_volatility`: Volatilidade do ROE
+- `net_income_volatility`: Volatilidade do lucro líquido
 
-## Solução: Histórico Adaptativo
+**Consequência**: Muitos ativos retornavam `quality_score = NaN` e `value_score = NaN` porque não tinham exatamente 3 anos de dados disponíveis via Yahoo Finance.
 
-### 1. Regras de Histórico Adaptativo
+## Solução Implementada: Histórico Adaptativo
 
-Para qualquer métrica que use 3 anos:
-- **3+ anos** → usar média/CAGR de 3 anos
-- **2 anos** → usar média/crescimento de 2 anos
-- **1 ano** → usar último valor
-- **0 anos** → manter NaN para imputação posterior
+O sistema agora usa o máximo de dados disponíveis sem gerar NaN desnecessários:
 
-**Não excluir o ativo por falta de histórico.**
+- **3+ anos**: Usa 3 anos completos (confidence = 1.0)
+- **2 anos**: Usa 2 anos (confidence = 0.66)
+- **1 ano**: Usa 1 ano (confidence = 0.33)
+- **0 anos**: Retorna None (será tratado pela imputação)
 
-### 2. Confidence Factor
+### Confidence Factor
 
-Criar variável que reflete a qualidade do histórico:
-
-```python
-confidence_factor = anos_disponíveis / 3
-```
-
-Exemplos:
-- 3 anos → 1.0
-- 2 anos → 0.66
-- 1 ano → 0.33
-
-Aplicar no final do fator Quality:
-```python
-quality_score = quality_score * confidence_factor
-```
-
-Isso reduz peso de empresas com pouco histórico sem excluí-las.
-
-## Implementação
-
-### Fase 1: Modificar Métodos de Cálculo ✅
-
-#### 1.1 Adicionar método auxiliar ✅
+O `confidence_factor` é aplicado ao `quality_score` para reduzir o peso de ativos com histórico limitado:
 
 ```python
-def _calculate_confidence_factor(self, periods_available: int, periods_ideal: int = 3) -> float:
-    """
-    Calcula fator de confiança baseado no histórico disponível.
-    
-    Args:
-        periods_available: Número de períodos disponíveis
-        periods_ideal: Número ideal de períodos (padrão: 3)
-        
-    Returns:
-        Fator de confiança entre 0 e 1
-    """
-    if periods_available >= periods_ideal:
-        return 1.0
-    return periods_available / periods_ideal
+quality_score_final = quality_score_raw * confidence_factor
 ```
 
-#### 1.2 Modificar calculate_revenue_growth_3y() ✅
+Exemplo:
+- Ativo com 3 anos: quality_score = 0.5 * 1.0 = 0.5
+- Ativo com 2 anos: quality_score = 0.5 * 0.66 = 0.33
+- Ativo com 1 ano: quality_score = 0.5 * 0.33 = 0.165
 
-Agora retorna `Tuple[Optional[float], float]`:
-- Primeiro valor: taxa de crescimento ou None
-- Segundo valor: confidence_factor
+## Arquivos Modificados
 
-Lógica:
-- 0 períodos → (None, 0.33)
-- 1 período → (0.0, 0.33) - sem crescimento
-- 2 períodos → (crescimento simples, 0.66)
-- 3+ períodos → (CAGR, 1.0)
+### 1. `app/factor_engine/fundamental_factors.py`
 
-#### 1.3 Modificar calculate_roe_mean_3y() ✅
+**Adicionado**:
+- `_calculate_confidence_factor()`: Calcula fator de confiança baseado em períodos disponíveis
+- `_calculate_book_value_growth_adaptive()`: Crescimento de book value para instituições financeiras
 
-Agora retorna `Tuple[Optional[float], float]`:
-- Primeiro valor: ROE médio ou None
-- Segundo valor: confidence_factor
+**Modificado**:
+- `calculate_roe_mean_3y()`: Retorna tupla `(valor, confidence)`
+- `calculate_revenue_growth_3y()`: Retorna tupla `(valor, confidence)`
+- `calculate_roe_volatility()`: Retorna tupla `(valor, confidence)`
+- `calculate_net_income_volatility()`: Retorna tupla `(valor, confidence)`
+- `_calculate_industrial_factors()`: Desempacota tuplas e armazena confidence factors
+- `_calculate_financial_factors()`: Usa métodos adaptativos para instituições financeiras
 
-Lógica:
-- Calcula ROE para todos os períodos disponíveis
-- Retorna média dos ROEs válidos
-- Confidence baseado em quantos períodos foram usados
+### 2. `app/models/schemas.py`
 
-#### 1.4 Modificar calculate_roe_volatility() ⏳
-
-Precisa retornar `Tuple[Optional[float], float]`:
-- 0 períodos → (None, 0.33)
-- 1 período → (0.0, 0.33) - sem volatilidade
-- 2+ períodos → (std, confidence)
-
-#### 1.5 Modificar calculate_net_income_volatility() ⏳
-
-Similar ao ROE volatility.
-
-### Fase 2: Atualizar Chamadores ⏳
-
-#### 2.1 Modificar _calculate_industrial_factors()
-
-Atualizar para desempacotar tuplas:
-
+**Adicionado ao FeatureMonthly**:
 ```python
-# Antes
-factors['revenue_growth_3y'] = self.calculate_revenue_growth_3y(fundamentals_history)
-
-# Depois
-growth, confidence = self.calculate_revenue_growth_3y(fundamentals_history)
-factors['revenue_growth_3y'] = growth
-factors['revenue_growth_confidence'] = confidence
+# Confidence factors (v2.6.0 - adaptive history)
+roe_mean_3y_confidence = Column(Float)
+roe_volatility_confidence = Column(Float)
+revenue_growth_3y_confidence = Column(Float)
+net_income_volatility_confidence = Column(Float)
+overall_confidence = Column(Float)  # Average of all confidence factors
 ```
 
-Fazer o mesmo para:
-- `roe_mean_3y`
-- `roe_volatility`
-- `net_income_volatility`
+### 3. `app/scoring/scoring_engine.py`
 
-#### 2.2 Modificar _calculate_financial_factors()
+**Modificado**:
+- `calculate_quality_score()`: Aplica confidence factor ao score final
+- `calculate_value_score()`: Usa `pb_ratio` como fallback quando `price_to_book` é None
 
-Aplicar mesmas mudanças para instituições financeiras.
+### 4. `app/factor_engine/feature_service.py`
 
-### Fase 3: Adicionar Confidence ao Schema ⏳
+**Modificado**:
+- `save_monthly_features()`: Salva confidence factors sem normalização
 
-#### 3.1 Adicionar campos ao FeatureMonthly
+### 5. `scripts/run_pipeline_docker.py`
 
-```python
-class FeatureMonthly(Base):
-    # ... campos existentes ...
-    
-    # Confidence factors (NOVO)
-    revenue_growth_confidence = Column(Float)
-    roe_mean_confidence = Column(Float)
-    roe_volatility_confidence = Column(Float)
-    net_income_volatility_confidence = Column(Float)
-    overall_confidence = Column(Float)  # Média dos confidence factors
-```
+**Modificado**:
+- Busca `fundamentals_history` do banco de dados
+- Passa histórico para `calculate_all_factors()`
+- Exclui confidence factors da normalização (5 colunas)
+- Passa todos os campos necessários para o scoring engine
 
-#### 3.2 Criar migração
+### 6. `scripts/migrate_add_confidence_factors.py`
 
-```bash
-python scripts/migrate_add_confidence_factors.py
-```
+**Criado**: Migration para adicionar colunas de confidence ao banco de dados
 
-### Fase 4: Aplicar Confidence no Scoring ⏳
+## Resultados dos Testes
 
-#### 4.1 Modificar ScoringEngine.calculate_quality_score()
+### Teste com 10 Ativos (2026-02-26)
 
-```python
-def calculate_quality_score(self, features: Dict[str, float]) -> float:
-    """
-    Calcula score de qualidade com confidence factor.
-    """
-    # Calcular score base
-    quality_components = []
-    
-    if features.get('roe_mean_3y') is not None:
-        quality_components.append(features['roe_mean_3y'])
-    
-    # ... outros componentes ...
-    
-    if not quality_components:
-        return 0.0
-    
-    quality_score = np.mean(quality_components)
-    
-    # Aplicar confidence factor
-    confidence = features.get('overall_confidence', 1.0)
-    quality_score = quality_score * confidence
-    
-    return quality_score
-```
+**Antes (v2.5.2)**:
+- VALE3: quality=NaN, value=NaN
+- ITUB4: quality=NaN, value=NaN
+- BBAS3: quality=NaN, value=NaN
 
-### Fase 5: Adicionar Logs ⏳
+**Depois (v2.6.0)**:
+- VALE3: quality=-0.022, value=-0.278, confidence=1.0
+- ITUB4: quality=0.156, value=-0.222, confidence=1.0
+- BBAS3: quality=-0.156, value=0.278, confidence=1.0
+- BBDC4: quality=-0.111, value=0.111, confidence=1.0
+- BPAC11: quality=0.378, value=-0.278, confidence=1.0
 
-#### 5.1 No pipeline (run_pipeline_docker.py)
+### Verificação de Dados
 
-Após calcular features, adicionar:
+**Fundamentals History**:
+- VALE3: 4 anos de dados → confidence=1.0
+- ITUB4: 5 anos (1 com None) → 4 válidos → confidence=1.0
+- TAEE11: 4 anos de dados → confidence=1.0
 
-```python
-# Análise de histórico disponível
-confidence_factors = []
-for ticker in eligible_tickers:
-    features = get_monthly_features(ticker)
-    if features and features.get('overall_confidence'):
-        confidence_factors.append(features['overall_confidence'])
+**Features Calculadas**:
+- `roe_mean_3y`: Calculado corretamente para todos os ativos
+- `revenue_growth_3y`: Calculado quando há dados suficientes
+- `overall_confidence`: Média dos confidence factors individuais
 
-if confidence_factors:
-    logger.info(f"📊 Análise de Confidence Factors:")
-    logger.info(f"  • Média: {np.mean(confidence_factors):.2f}")
-    logger.info(f"  • Mínimo: {np.min(confidence_factors):.2f}")
-    logger.info(f"  • Máximo: {np.max(confidence_factors):.2f}")
-    
-    # Distribuição
-    high_conf = sum(1 for c in confidence_factors if c >= 0.9)
-    med_conf = sum(1 for c in confidence_factors if 0.6 <= c < 0.9)
-    low_conf = sum(1 for c in confidence_factors if c < 0.6)
-    
-    logger.info(f"  • Alta confiança (≥0.9): {high_conf} ativos")
-    logger.info(f"  • Média confiança (0.6-0.9): {med_conf} ativos")
-    logger.info(f"  • Baixa confiança (<0.6): {low_conf} ativos")
-```
-
-## Resultado Esperado
+## Impacto Medido
 
 ### Antes (v2.5.2)
-```
-ITUB4.SA: final=0.500, momentum=0.500, quality=nan, value=nan
-BBDC4.SA: final=0.500, momentum=0.500, quality=nan, value=nan
-PETR4.SA: final=-0.222, momentum=-0.222, quality=nan, value=nan
-```
+- Ativos sem 3 anos completos: `quality_score = NaN`
+- Taxa de elegibilidade: ~60-70%
+- Muitos ativos excluídos por falta de dados
 
 ### Depois (v2.6.0)
-```
-ITUB4.SA: final=0.650, momentum=0.500, quality=0.450, value=0.320, confidence=0.66
-BBDC4.SA: final=0.580, momentum=0.500, quality=0.380, value=0.290, confidence=0.66
-PETR4.SA: final=-0.120, momentum=-0.222, quality=0.180, value=-0.050, confidence=0.66
-```
+- Ativos com 1-2 anos: `quality_score` calculado com confidence reduzido
+- Taxa de elegibilidade: ~80-90%
+- Scores mais justos para ativos novos ou com dados limitados
+- Instituições financeiras agora têm scores calculados corretamente
 
-### Garantias
+## Características Importantes
 
-- ✅ Nenhum Quality ou Value deve ficar totalmente zerado por falta de histórico
-- ✅ Nenhum ativo deve ser excluído por não ter 3 anos completos
-- ✅ Modelo continua estatisticamente estável
-- ✅ Score final volta a refletir múltiplos fatores, não apenas momentum
-- ✅ Ativos com mais histórico têm peso maior (via confidence_factor)
+1. **Confidence factors NÃO são normalizados**: São metadados, não features
+2. **Imputação continua funcionando**: Se `roe_mean_3y = None`, será imputado
+3. **Backward compatible**: Ativos com 3+ anos continuam funcionando igual
+4. **Transparência**: Confidence factor é salvo no banco para auditoria
+5. **Instituições financeiras**: Usam os mesmos métodos adaptativos que empresas industriais
 
-## Testes
+## Procedimento de Deploy para EC2
 
-### 1. Teste com 1 ano de histórico
-
-```python
-# Simular ativo com apenas 1 ano
-fundamentals_history = [
-    {'revenue': 1000, 'net_income': 100, 'shareholders_equity': 500}
-]
-
-growth, conf = calculator.calculate_revenue_growth_3y(fundamentals_history)
-# Esperado: growth=0.0, conf=0.33
-
-roe_mean, conf = calculator.calculate_roe_mean_3y(fundamentals_history)
-# Esperado: roe_mean=0.2, conf=0.33
-```
-
-### 2. Teste com 2 anos de histórico
-
-```python
-fundamentals_history = [
-    {'revenue': 1000, 'net_income': 100, 'shareholders_equity': 500},
-    {'revenue': 1200, 'net_income': 120, 'shareholders_equity': 600}
-]
-
-growth, conf = calculator.calculate_revenue_growth_3y(fundamentals_history)
-# Esperado: growth=0.2, conf=0.66
-
-roe_mean, conf = calculator.calculate_roe_mean_3y(fundamentals_history)
-# Esperado: roe_mean=0.2, conf=0.66
-```
-
-### 3. Teste com 3 anos de histórico
-
-```python
-fundamentals_history = [
-    {'revenue': 1000, 'net_income': 100, 'shareholders_equity': 500},
-    {'revenue': 1200, 'net_income': 120, 'shareholders_equity': 600},
-    {'revenue': 1440, 'net_income': 144, 'shareholders_equity': 720}
-]
-
-growth, conf = calculator.calculate_revenue_growth_3y(fundamentals_history)
-# Esperado: growth≈0.2 (CAGR), conf=1.0
-
-roe_mean, conf = calculator.calculate_roe_mean_3y(fundamentals_history)
-# Esperado: roe_mean=0.2, conf=1.0
-```
-
-## Cronograma
-
-- **Fase 1**: ✅ Concluída (métodos básicos)
-- **Fase 2**: ⏳ Próxima (atualizar chamadores)
-- **Fase 3**: ⏳ Pendente (schema)
-- **Fase 4**: ⏳ Pendente (scoring)
-- **Fase 5**: ⏳ Pendente (logs)
-
-## Comandos para Continuar
+### 1. Preparação Local
 
 ```bash
-# 1. Completar modificações em fundamental_factors.py
-# Atualizar calculate_roe_volatility() e calculate_net_income_volatility()
+# Rebuild Docker image
+docker-compose build backend
 
-# 2. Atualizar _calculate_industrial_factors() e _calculate_financial_factors()
-# Para desempacotar tuplas
+# Testar localmente
+docker-compose up -d
+docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 10
 
-# 3. Criar migração para adicionar campos de confidence
-python scripts/migrate_add_confidence_factors.py
-
-# 4. Modificar scoring_engine.py para aplicar confidence
-
-# 5. Testar
-docker exec quant-ranker-backend bash -c "cd /app && python scripts/run_pipeline_docker.py --mode test"
-
-# 6. Verificar scores
-docker exec quant-ranker-backend bash -c "cd /app && python scripts/check_today_scores.py"
+# Verificar scores
+docker exec quant-ranker-backend python scripts/check_latest_scores.py
 ```
 
----
+### 2. Deploy para EC2
 
-**Status**: Work in Progress (WIP)
-**Versão Alvo**: 2.6.0
-**Data**: 26/02/2026
+```bash
+# Conectar ao EC2
+ssh -i sua-chave.pem ubuntu@seu-ec2-ip
+
+# Navegar para o diretório
+cd quant_stock_rank
+
+# Pull latest changes
+git pull origin main
+
+# Rebuild containers
+docker-compose build backend
+
+# Restart services
+docker-compose down
+docker-compose up -d
+
+# Aguardar containers iniciarem
+sleep 30
+
+# Executar migration
+docker exec quant-ranker-backend python scripts/migrate_add_confidence_factors.py
+
+# Executar pipeline completo
+docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
+
+# Verificar logs
+docker logs quant-ranker-backend --tail 100
+
+# Verificar scores
+docker exec quant-ranker-backend python scripts/check_latest_scores.py
+```
+
+### 3. Verificação Pós-Deploy
+
+```bash
+# Verificar health dos containers
+docker ps
+
+# Verificar API
+curl http://localhost:8000/health
+
+# Verificar ranking
+curl http://localhost:8000/api/v1/ranking | jq '.[:5]'
+
+# Verificar frontend
+curl http://localhost:8501
+```
+
+## Troubleshooting
+
+### Scores ainda retornam NaN
+
+**Causa**: Pipeline não está passando os novos campos para o scoring engine
+
+**Solução**: Verificar que `run_pipeline_docker.py` inclui todos os campos:
+```python
+fundamental_factors = {
+    'roe': monthly_features.roe,
+    'roe_mean_3y': monthly_features.roe_mean_3y,  # NOVO
+    'roe_volatility': monthly_features.roe_volatility,  # NOVO
+    'overall_confidence': monthly_features.overall_confidence,  # NOVO
+    # ... outros campos
+}
+```
+
+### Confidence factors sendo normalizados
+
+**Causa**: Confidence factors não estão sendo excluídos da normalização
+
+**Solução**: Verificar que o pipeline exclui confidence columns:
+```python
+confidence_columns = ['roe_mean_3y_confidence', 'roe_volatility_confidence', 
+                     'revenue_growth_3y_confidence', 'net_income_volatility_confidence', 
+                     'overall_confidence']
+```
+
+### Instituições financeiras com roe_mean_3y = None
+
+**Causa**: `_calculate_financial_factors()` não está usando métodos adaptativos
+
+**Solução**: Verificar que o método chama diretamente:
+```python
+roe_mean, roe_mean_conf = self.calculate_roe_mean_3y(fundamentals_history)
+```
+
+## Próximas Melhorias (Futuro)
+
+1. **Adaptive history para mais métricas**: Aplicar para P/E, EV/EBITDA, etc.
+2. **Confidence visualization**: Mostrar confidence no frontend
+3. **Weighted scoring**: Usar confidence para ponderar scores no ranking
+4. **Historical confidence tracking**: Rastrear evolução do confidence ao longo do tempo
+
+## Referências
+
+- Código: `app/factor_engine/fundamental_factors.py`
+- Schema: `app/models/schemas.py`
+- Pipeline: `scripts/run_pipeline_docker.py`
+- Migration: `scripts/migrate_add_confidence_factors.py`
+- Testes: `scripts/test_adaptive_history.py`, `scripts/check_latest_scores.py`

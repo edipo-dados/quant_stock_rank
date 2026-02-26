@@ -1,12 +1,14 @@
-# 📚 Índice da Documentação - v2.5.2
+# 📚 Índice da Documentação - v2.6.0
 
 Bem-vindo à documentação do Sistema de Ranking Quantitativo de Ações!
 
-## 📌 Versão Atual: 2.5.2
+## 📌 Versão Atual: 2.6.0 - Adaptive History
 
-Sistema com arquitetura de 3 camadas e tratamento estatístico correto de missing values:
+Sistema com histórico adaptativo e confidence factors:
+- **Histórico Adaptativo**: Usa 1-3 anos de dados sem exigir exatamente 3 anos
+- **Confidence Factors**: Rastreia qualidade dos dados e aplica ao quality_score
 - Scores distribuídos entre -3 e +3, média ~0
-- Taxa de elegibilidade >= 80%
+- Taxa de elegibilidade >= 80-90%
 - Pipeline determinístico e estatisticamente estável
 
 ## 🚀 Início Rápido
@@ -14,7 +16,8 @@ Sistema com arquitetura de 3 camadas e tratamento estatístico correto de missin
 **Novo no sistema?** Comece aqui:
 1. [README.md](../README.md) - Visão geral e instalação
 2. [GUIA_USO.md](GUIA_USO.md) - Tutorial completo de uso
-3. [DOCKER.md](DOCKER.md) - Guia Docker
+3. [ADAPTIVE_HISTORY_IMPLEMENTATION.md](../ADAPTIVE_HISTORY_IMPLEMENTATION.md) - **NOVO**: Histórico adaptativo
+4. [DOCKER.md](DOCKER.md) - Guia Docker
 
 ## 📖 Documentação Principal
 
@@ -25,18 +28,29 @@ Sistema com arquitetura de 3 camadas e tratamento estatístico correto de missin
 | [README.md](../README.md) | Visão geral do sistema | Primeira leitura |
 | [GUIA_USO.md](GUIA_USO.md) | Tutorial completo | Aprender a usar |
 | [CALCULOS_RANKING.md](CALCULOS_RANKING.md) | Metodologia detalhada | Entender cálculos |
+| [ADAPTIVE_HISTORY_IMPLEMENTATION.md](../ADAPTIVE_HISTORY_IMPLEMENTATION.md) | **NOVO v2.6.0**: Histórico adaptativo | Entender confidence factors |
 | [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) | Arquitetura 3 camadas | Entender pipeline |
 | [MISSING_VALUE_TREATMENT.md](MISSING_VALUE_TREATMENT.md) | Tratamento de NaN | Entender imputação |
 | [DOCKER.md](DOCKER.md) | Guia completo Docker | Usar Docker |
 | [CHAT_GEMINI.md](CHAT_GEMINI.md) | Chat com IA | Usar assistente |
 | [MCP_SERVER.md](MCP_SERVER.md) | Integração com agentes | Integrar com IA |
-| [PIPELINE_INTELIGENTE.md](PIPELINE_INTELIGENTE.md) | Pipeline otimizado | Executar pipeline |
+
+### Para Deploy e Manutenção
+
+| Documento | Descrição |
+|-----------|-----------|
+| [../deploy/EC2_DEPLOY_V2.6.0.md](../deploy/EC2_DEPLOY_V2.6.0.md) | **NOVO**: Deploy v2.6.0 no EC2 |
+| [../deploy/SETUP_NOVO_EC2.md](../deploy/SETUP_NOVO_EC2.md) | Setup inicial EC2 |
+| [../deploy/QUICK_REFERENCE.md](../deploy/QUICK_REFERENCE.md) | Comandos rápidos |
+| [CHANGELOG.md](../CHANGELOG.md) | Histórico de mudanças |
 
 ### Para Desenvolvedores
 
 | Documento | Descrição |
 |-----------|-----------|
-| [CHANGELOG.md](../CHANGELOG.md) | Histórico de mudanças |
+| [ACADEMIC_MOMENTUM_IMPLEMENTATION.md](ACADEMIC_MOMENTUM_IMPLEMENTATION.md) | Momentum acadêmico |
+| [VALUE_SIZE_IMPLEMENTATION.md](VALUE_SIZE_IMPLEMENTATION.md) | Fatores Value e Size |
+| [MELHORIAS_ACADEMICAS.md](MELHORIAS_ACADEMICAS.md) | Roadmap de melhorias |
 | [API Swagger](http://localhost:8000/docs) | Documentação interativa da API |
 | [API ReDoc](http://localhost:8000/redoc) | Documentação alternativa |
 
@@ -51,6 +65,12 @@ Sistema com arquitetura de 3 camadas e tratamento estatístico correto de missin
 ### "Quero entender os cálculos"
 → [CALCULOS_RANKING.md](CALCULOS_RANKING.md)
 
+### "Quero entender o histórico adaptativo (v2.6.0)"
+→ [ADAPTIVE_HISTORY_IMPLEMENTATION.md](../ADAPTIVE_HISTORY_IMPLEMENTATION.md)
+
+### "Quero fazer deploy no EC2"
+→ [../deploy/EC2_DEPLOY_V2.6.0.md](../deploy/EC2_DEPLOY_V2.6.0.md)
+
 ### "Quero usar Docker"
 → [DOCKER.md](DOCKER.md)
 
@@ -60,25 +80,30 @@ Sistema com arquitetura de 3 camadas e tratamento estatístico correto de missin
 ### "Quero integrar com Claude/ChatGPT"
 → [MCP_SERVER.md](MCP_SERVER.md)
 
-### "Quero executar o pipeline"
-→ [PIPELINE_INTELIGENTE.md](PIPELINE_INTELIGENTE.md)
-
-
 ### "Tenho problemas"
-→ [GUIA_USO.md - Troubleshooting](GUIA_USO.md#8-troubleshooting)
+→ [ADAPTIVE_HISTORY_IMPLEMENTATION.md - Troubleshooting](../ADAPTIVE_HISTORY_IMPLEMENTATION.md#troubleshooting)
 
 ## 📊 Estrutura da Documentação
 
 ```
 docs/
-├── INDEX.md                    # Este arquivo
-├── GUIA_USO.md                # Tutorial completo
-├── CALCULOS_RANKING.md        # Metodologia
-├── MELHORIAS_ACADEMICAS.md    # Melhorias acadêmicas v2.2.0
-├── DOCKER.md                  # Guia Docker
-├── CHAT_GEMINI.md             # Chat com IA
-├── MCP_SERVER.md              # Integração MCP
-└── PIPELINE_INTELIGENTE.md    # Pipeline otimizado
+├── INDEX.md                              # Este arquivo
+├── GUIA_USO.md                          # Tutorial completo
+├── CALCULOS_RANKING.md                  # Metodologia
+├── ADAPTIVE_HISTORY_IMPLEMENTATION.md   # NOVO v2.6.0: Histórico adaptativo
+├── PIPELINE_ARCHITECTURE.md             # Arquitetura 3 camadas
+├── MISSING_VALUE_TREATMENT.md           # Tratamento de NaN
+├── ACADEMIC_MOMENTUM_IMPLEMENTATION.md  # Momentum acadêmico
+├── VALUE_SIZE_IMPLEMENTATION.md         # Value e Size
+├── MELHORIAS_ACADEMICAS.md             # Roadmap
+├── DOCKER.md                           # Guia Docker
+├── CHAT_GEMINI.md                      # Chat com IA
+└── MCP_SERVER.md                       # Integração MCP
+
+deploy/
+├── EC2_DEPLOY_V2.6.0.md                # NOVO: Deploy v2.6.0
+├── SETUP_NOVO_EC2.md                   # Setup inicial
+└── QUICK_REFERENCE.md                  # Comandos rápidos
 ```
 
 ## 🔗 Links Úteis
@@ -107,6 +132,7 @@ docs/
 - 🔧 Configuração
 - 📊 Dados/Métricas
 - 🚀 Performance/Otimização
+- 🆕 Novo na v2.6.0
 
 ### Formato de Tickers
 Sempre use o formato completo com `.SA`:
@@ -116,7 +142,7 @@ Sempre use o formato completo com `.SA`:
 ## 🆘 Suporte
 
 ### Problemas Técnicos
-1. Consulte [GUIA_USO.md - Troubleshooting](GUIA_USO.md#8-troubleshooting)
+1. Consulte [ADAPTIVE_HISTORY_IMPLEMENTATION.md - Troubleshooting](../ADAPTIVE_HISTORY_IMPLEMENTATION.md#troubleshooting)
 2. Veja logs: `docker logs quant-ranker-backend --tail 50`
 3. Abra issue no GitHub
 
@@ -125,16 +151,65 @@ Sempre use o formato completo com `.SA`:
 2. Consulte [CALCULOS_RANKING.md](CALCULOS_RANKING.md)
 3. Veja exemplos na [API Swagger](http://localhost:8000/docs)
 
+### Dúvidas sobre v2.6.0
+1. Leia [ADAPTIVE_HISTORY_IMPLEMENTATION.md](../ADAPTIVE_HISTORY_IMPLEMENTATION.md)
+2. Veja [CHANGELOG.md](../CHANGELOG.md) seção v2.6.0
+3. Consulte [../deploy/EC2_DEPLOY_V2.6.0.md](../deploy/EC2_DEPLOY_V2.6.0.md) para deploy
+
 ## 📅 Última Atualização
 
-26 de Fevereiro de 2026 - v2.5.2
+26 de Fevereiro de 2026 - v2.6.0
 
-### Mudanças Principais
+### Mudanças Principais v2.6.0
+- 🆕 **Histórico Adaptativo**: Sistema usa 1-3 anos de dados
+- 🆕 **Confidence Factors**: Rastreia qualidade dos dados
+- 🆕 **Scores Melhorados**: Menos NaN, mais ativos elegíveis
+- 🆕 **Instituições Financeiras**: Scores calculados corretamente
+- 🆕 **Taxa de Elegibilidade**: 60-70% → 80-90%
+
+### Mudanças Anteriores
 - ✅ Arquitetura de 3 camadas (v2.5.1)
 - ✅ Tratamento estatístico de missing values (v2.5.2)
 - ✅ Remoção completa de valores sentinela (-999)
 - ✅ Scores normalizados corretamente
-- ✅ Taxa de elegibilidade >= 80%
+
+## 🔄 Migração para v2.6.0
+
+Se você está usando v2.5.2, siga estes passos:
+
+1. **Backup do banco de dados**
+   ```bash
+   ./deploy/backup-db.sh
+   ```
+
+2. **Pull das mudanças**
+   ```bash
+   git pull origin main
+   ```
+
+3. **Rebuild containers**
+   ```bash
+   docker-compose down
+   docker-compose build backend
+   docker-compose up -d
+   ```
+
+4. **Executar migration**
+   ```bash
+   docker exec quant-ranker-backend python scripts/migrate_add_confidence_factors.py
+   ```
+
+5. **Executar pipeline**
+   ```bash
+   docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
+   ```
+
+6. **Verificar scores**
+   ```bash
+   docker exec quant-ranker-backend python scripts/check_latest_scores.py
+   ```
+
+Veja [../deploy/EC2_DEPLOY_V2.6.0.md](../deploy/EC2_DEPLOY_V2.6.0.md) para procedimento completo.
 
 ---
 

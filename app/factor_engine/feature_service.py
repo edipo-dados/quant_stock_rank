@@ -188,6 +188,12 @@ class FeatureService:
                 existing.debt_to_ebitda_raw = features_converted.get('debt_to_ebitda_raw')
                 existing.net_income_last_year = features_converted.get('net_income_last_year')
                 existing.net_income_history = features_converted.get('net_income_history')
+                # Confidence factors (v2.6.0)
+                existing.roe_mean_3y_confidence = features_converted.get('roe_mean_3y_confidence')
+                existing.roe_volatility_confidence = features_converted.get('roe_volatility_confidence')
+                existing.revenue_growth_3y_confidence = features_converted.get('revenue_growth_3y_confidence')
+                existing.net_income_volatility_confidence = features_converted.get('net_income_volatility_confidence')
+                existing.overall_confidence = features_converted.get('overall_confidence')
                 
                 logger.info(f"Updated monthly features for {ticker} on {month}")
                 record = existing
@@ -210,7 +216,13 @@ class FeatureService:
                     roe_volatility=features_converted.get('roe_volatility'),
                     debt_to_ebitda_raw=features_converted.get('debt_to_ebitda_raw'),
                     net_income_last_year=features_converted.get('net_income_last_year'),
-                    net_income_history=features_converted.get('net_income_history')
+                    net_income_history=features_converted.get('net_income_history'),
+                    # Confidence factors (v2.6.0)
+                    roe_mean_3y_confidence=features_converted.get('roe_mean_3y_confidence'),
+                    roe_volatility_confidence=features_converted.get('roe_volatility_confidence'),
+                    revenue_growth_3y_confidence=features_converted.get('revenue_growth_3y_confidence'),
+                    net_income_volatility_confidence=features_converted.get('net_income_volatility_confidence'),
+                    overall_confidence=features_converted.get('overall_confidence')
                 )
                 self.db.add(record)
                 logger.info(f"Created monthly features for {ticker} on {month}")

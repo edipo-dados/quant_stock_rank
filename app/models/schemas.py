@@ -182,6 +182,13 @@ class FeatureMonthly(Base):
     net_income_last_year = Column(Float)
     net_income_history = Column(JSON)  # List of net income values
     
+    # Confidence factors (v2.6.0 - adaptive history)
+    roe_mean_3y_confidence = Column(Float)
+    roe_volatility_confidence = Column(Float)
+    revenue_growth_3y_confidence = Column(Float)
+    net_income_volatility_confidence = Column(Float)
+    overall_confidence = Column(Float)  # Average of all confidence factors
+    
     calculated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     __table_args__ = (

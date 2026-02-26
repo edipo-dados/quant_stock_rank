@@ -1,9 +1,11 @@
-# Quant Stock Ranker v2.5.2
+# Quant Stock Ranker v2.6.0
 
-Sistema de ranking quantitativo de ações brasileiras baseado em fatores acadêmicos (Momentum, Quality, Value, Size).
+Sistema de ranking quantitativo de ações brasileiras baseado em fatores acadêmicos (Momentum, Quality, Value, Size) com histórico adaptativo.
 
 ## 🎯 Características
 
+- **Histórico Adaptativo (v2.6.0)**: Usa 1-3 anos de dados sem exigir exatamente 3 anos
+- **Confidence Factors**: Rastreia qualidade dos dados e aplica ao quality_score
 - **Arquitetura de 3 Camadas**: Elegibilidade estrutural → Feature engineering → Scoring
 - **Tratamento Estatístico de Missing Values**: Imputação com medianas setoriais/universais
 - **Sem Valores Sentinela**: Sistema usa NaN e redistribuição de pesos
@@ -21,21 +23,38 @@ Sistema de ranking quantitativo de ações brasileiras baseado em fatores acadê
 - volatility_90d: Volatilidade 90 dias (invertido)
 - recent_drawdown: Drawdown recente (invertido)
 
-**Quality (25%)**
-- roe_mean_3y: ROE médio 3 anos
+**Quality (25%)** - Com Confidence Factor
+- roe_mean_3y: ROE médio (1-3 anos disponíveis)
 - roe_volatility: Volatilidade do ROE (invertido)
 - net_margin: Margem líquida
-- revenue_growth_3y: Crescimento de receita 3 anos
+- revenue_growth_3y: Crescimento de receita (1-3 anos)
 - debt_to_ebitda: Dívida/EBITDA (invertido)
+- **overall_confidence**: Fator de confiança aplicado ao score (0.33-1.0)
 
 **Value (30%)**
 - pe_ratio: P/L (invertido)
-- price_to_book: P/B (invertido)
+- price_to_book: P/B (invertido) - com fallback para pb_ratio
 - ev_ebitda: EV/EBITDA (invertido)
 - fcf_yield: FCF Yield
 
 **Size (10%)**
 - size_factor: -log(market_cap)
+
+### Histórico Adaptativo (v2.6.0)
+
+O sistema agora usa o máximo de dados disponíveis:
+
+- **3+ anos**: Usa 3 anos completos (confidence = 1.0)
+- **2 anos**: Usa 2 anos (confidence = 0.66)
+- **1 ano**: Usa 1 ano (confidence = 0.33)
+- **0 anos**: Retorna None (será imputado)
+
+**Confidence Factor**: Aplicado ao quality_score para reduzir peso de ativos com histórico limitado.
+
+Exemplo:
+- Ativo com 3 anos: quality_score = 0.5 * 1.0 = 0.5
+- Ativo com 2 anos: quality_score = 0.5 * 0.66 = 0.33
+- Ativo com 1 ano: quality_score = 0.5 * 0.33 = 0.165
 
 ### Filtro de Elegibilidade Estrutural
 
@@ -52,12 +71,15 @@ Exclui apenas ativos com problemas estruturais graves:
 
 ### Tratamento de Missing Values
 
-1. **Cálculo de Features**: Mantém NaN quando dados insuficientes
+1. **Cálculo de Features**: Usa histórico adaptativo, mantém NaN quando dados insuficientes
 2. **Imputação**: Antes da normalização
    - Mediana setorial (se setor >= 5 ativos)
    - Mediana universal (fallback)
 3. **Normalização**: Z-score cross-sectional + winsorização ±3σ
-4. **Scoring**: Redistribui pesos quando categorias têm NaN
+   - **Confidence factors NÃO são normalizados** (são metadados)
+4. **Scoring**: 
+   - Aplica confidence factor ao quality_score
+   - Redistribui pesos quando categorias têm NaN
 
 ## 🚀 Quick Start
 
@@ -67,17 +89,20 @@ Exclui apenas ativos com problemas estruturais graves:
 # Iniciar containers
 docker-compose up -d
 
-# Rodar pipeline de teste (5 ativos)
+# Rodar pipeline de teste (10 ativos)
 docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode test --limit 10
 
 # Rodar pipeline produção (50 ativos)
 docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
 
+# Verificar scores
+docker exec quant-ranker-backend python scripts/check_latest_scores.py
+
 # Acessar frontend
 http://localhost:8501
 ```
 
-### EC2 Deploy
+### EC2 Deploy (v2.6.0)
 
 ```bash
 # 1. Clone e configure
@@ -90,13 +115,19 @@ cp .env.example .env
 docker-compose up -d --build
 
 # 3. Aguardar containers ficarem healthy
-sleep 20
+sleep 30
 docker-compose ps
 
-# 4. Rodar pipeline
+# 4. Executar migration (v2.6.0)
+docker exec quant-ranker-backend python scripts/migrate_add_confidence_factors.py
+
+# 5. Rodar pipeline
 docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
 
-# 5. Configurar cron job (execução diária às 19h)
+# 6. Verificar scores
+docker exec quant-ranker-backend python scripts/check_latest_scores.py
+
+# 7. Configurar cron job (execução diária às 19h)
 crontab -e
 # Adicionar:
 0 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 >> /var/log/pipeline.log 2>&1

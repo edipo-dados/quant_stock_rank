@@ -302,58 +302,68 @@ class FundamentalFactorCalculator:
             logger.warning(f"Error calculating ROE mean: {e}")
             return (None, 0.33)
     
-    def calculate_roe_volatility(self, fundamentals_history: List[Dict]) -> float:
-        """
-        Calcula volatilidade do ROE (desvio padrão).
-        
-        ROE_volatility = std(ROE_year1, ROE_year2, ROE_year3)
-        
-        Args:
-            fundamentals_history: Lista de dicts ordenados cronologicamente,
-                                 cada um contendo net_income e shareholders_equity
-            
-        Returns:
-            Desvio padrão do ROE como float
-            
-        Raises:
-            InsufficientDataError: Se não há dados suficientes (mínimo 2 períodos)
-            CalculationError: Se shareholders_equity é zero ou negativo
-        """
-        try:
-            if len(fundamentals_history) < 2:
-                raise InsufficientDataError(
-                    f"Need at least 2 periods for ROE volatility, got {len(fundamentals_history)}"
-                )
-            
-            # Calcular ROE para cada período
-            roes = []
-            for period in fundamentals_history:
-                net_income = period.get('net_income')
-                shareholders_equity = period.get('shareholders_equity')
-                
-                if net_income is None or shareholders_equity is None:
-                    raise InsufficientDataError(
-                        "Missing net_income or shareholders_equity in fundamentals history"
-                    )
-                
-                if shareholders_equity <= 0:
-                    raise CalculationError(
-                        f"Invalid shareholders_equity for ROE: {shareholders_equity}"
-                    )
-                
-                roe = net_income / shareholders_equity
-                roes.append(roe)
-            
-            # Calcular desvio padrão
-            import numpy as np
-            return np.std(roes, ddof=1)  # Sample std
-            
-        except (TypeError, ValueError, ZeroDivisionError) as e:
-            raise CalculationError(f"Error calculating ROE volatility: {e}")
+    def calculate_roe_volatility(self, fundamentals_history: List[Dict]) -> Tuple[Optional[float], float]:
+            """
+            Calcula volatilidade do ROE usando histórico adaptativo.
+
+            HISTÓRICO ADAPTATIVO:
+            - 3+ anos → std de 3 anos
+            - 2 anos → std de 2 anos
+            - 1 ano → retorna 0 (sem volatilidade)
+            - 0 anos → retorna (None, 0.33)
+
+            Args:
+                fundamentals_history: Lista de dicts ordenados cronologicamente
+
+            Returns:
+                Tuple (roe_volatility, confidence_factor)
+                - roe_volatility: Desvio padrão do ROE ou None
+                - confidence_factor: 0.33 a 1.0 baseado em períodos disponíveis
+            """
+            try:
+                periods = len(fundamentals_history)
+
+                if periods == 0:
+                    return (None, 0.33)
+
+                if periods == 1:
+                    # Apenas 1 período: sem volatilidade
+                    return (0.0, 0.33)
+
+                # Calcular ROE para cada período disponível
+                roes = []
+                for period in fundamentals_history:
+                    net_income = period.get('net_income')
+                    shareholders_equity = period.get('shareholders_equity')
+
+                    if net_income is not None and shareholders_equity is not None and shareholders_equity > 0:
+                        roe = net_income / shareholders_equity
+                        roes.append(roe)
+
+                if len(roes) < 2:
+                    return (0.0 if len(roes) == 1 else None, self._calculate_confidence_factor(periods))
+
+                # Calcular desvio padrão dos ROEs disponíveis
+                import numpy as np
+                roe_volatility = np.std(roes, ddof=1)  # Sample std
+                confidence = self._calculate_confidence_factor(len(roes))
+
+                return (roe_volatility, confidence)
+
+            except (TypeError, ValueError) as e:
+                logger.warning(f"Error calculating ROE volatility: {e}")
+                return (None, 0.33)
+
     
-    def calculate_net_income_volatility(self, fundamentals_history: List[Dict]) -> float:
+    def calculate_net_income_volatility(self, fundamentals_history: List[Dict]) -> Tuple[Optional[float], float]:
         """
-        Calcula volatilidade do lucro líquido (coeficiente de variação).
+        Calcula volatilidade do lucro líquido usando histórico adaptativo.
+        
+        HISTÓRICO ADAPTATIVO:
+        - 3+ anos → CV de 3 anos
+        - 2 anos → CV de 2 anos
+        - 1 ano → retorna 0 (sem volatilidade)
+        - 0 anos → retorna (None, 0.33)
         
         Volatility = std(net_income) / mean(net_income)
         
@@ -362,48 +372,103 @@ class FundamentalFactorCalculator:
                                  cada um contendo net_income
             
         Returns:
-            Coeficiente de variação como float
+            Tuple (volatility, confidence_factor)
+            - volatility: Coeficiente de variação ou None
+            - confidence_factor: 0.33 a 1.0 baseado em períodos disponíveis
             
-        Raises:
-            InsufficientDataError: Se não há dados suficientes (mínimo 2 períodos)
-            CalculationError: Se média é zero ou todos os valores são iguais
-            
-        Valida: Requisito 2.4
+        Valida: Requisito 2.4 (adaptativo)
         """
         try:
-            if len(fundamentals_history) < 2:
-                raise InsufficientDataError(
-                    f"Need at least 2 periods for volatility calculation, got {len(fundamentals_history)}"
-                )
+            periods = len(fundamentals_history)
             
-            # Extrair net_income de cada período
+            if periods == 0:
+                return (None, 0.33)
+            
+            if periods == 1:
+                # Apenas 1 período: sem volatilidade
+                return (0.0, 0.33)
+            
+            # Extrair net_income de cada período disponível
             net_incomes = []
             for period in fundamentals_history:
                 net_income = period.get('net_income')
-                if net_income is None:
-                    raise InsufficientDataError(
-                        "Missing net_income data in fundamentals history"
-                    )
-                net_incomes.append(net_income)
+                if net_income is not None:
+                    net_incomes.append(net_income)
+            
+            if len(net_incomes) < 2:
+                return (0.0 if len(net_incomes) == 1 else None, self._calculate_confidence_factor(periods))
             
             # Calcular média e desvio padrão
             import numpy as np
             mean_income = np.mean(net_incomes)
             std_income = np.std(net_incomes, ddof=1)  # Sample std
             
-            # Se média é zero ou muito próxima de zero, não podemos calcular CV
+            # Se média é zero ou muito próxima de zero, retornar None
             if abs(mean_income) < 1e-10:
-                raise CalculationError(
-                    f"Mean net income too close to zero for volatility calculation: {mean_income}"
-                )
+                return (None, self._calculate_confidence_factor(len(net_incomes)))
             
             # Coeficiente de variação = std / mean
             cv = std_income / abs(mean_income)
+            confidence = self._calculate_confidence_factor(len(net_incomes))
             
-            return cv
+            return (cv, confidence)
             
         except (TypeError, ValueError) as e:
-            raise CalculationError(f"Error calculating net income volatility: {e}")
+            logger.warning(f"Error calculating net income volatility: {e}")
+            return (None, 0.33)
+
+    def _calculate_book_value_growth_adaptive(self, fundamentals_history: List[Dict]) -> Tuple[Optional[float], float]:
+        """
+        Calcula crescimento de book value (shareholders_equity) usando histórico adaptativo.
+
+        HISTÓRICO ADAPTATIVO:
+        - 3+ anos → CAGR de 3 anos
+        - 2 anos → CAGR de 2 anos
+        - 1 ano → retorna None
+        - 0 anos → retorna (None, 0.33)
+
+        Args:
+            fundamentals_history: Lista de dicts ordenados cronologicamente,
+                                 cada um contendo shareholders_equity
+
+        Returns:
+            Tuple (growth_rate, confidence_factor)
+            - growth_rate: Taxa de crescimento anualizada ou None
+            - confidence_factor: 0.33 a 1.0 baseado em períodos disponíveis
+        """
+        try:
+            periods = len(fundamentals_history)
+
+            if periods < 2:
+                return (None, 0.33)
+
+            # Extrair shareholders_equity de cada período disponível
+            equities = []
+            for period in fundamentals_history:
+                equity = period.get('shareholders_equity')
+                if equity is not None and equity > 0:
+                    equities.append(equity)
+
+            if len(equities) < 2:
+                return (None, self._calculate_confidence_factor(periods))
+
+            # Calcular CAGR: (final/initial)^(1/years) - 1
+            initial_equity = equities[0]
+            final_equity = equities[-1]
+            years = len(equities) - 1
+
+            if initial_equity <= 0:
+                return (None, self._calculate_confidence_factor(len(equities)))
+
+            cagr = (final_equity / initial_equity) ** (1 / years) - 1
+            confidence = self._calculate_confidence_factor(len(equities))
+
+            return (cagr, confidence)
+
+        except (TypeError, ValueError, ZeroDivisionError) as e:
+            logger.warning(f"Error calculating book value growth: {e}")
+            return (None, 0.33)
+
     
     def calculate_financial_strength(
         self,
@@ -916,13 +981,48 @@ class FundamentalFactorCalculator:
         # Mapear para estrutura esperada pelo sistema
         factors = {}
         
-        # Qualidade (bancos)
+        # Qualidade (bancos) - USAR ADAPTIVE HISTORY
         factors['roe'] = financial_factors.get('roe')  # ROE 3Y robusto
-        factors['roe_mean_3y'] = financial_factors.get('roe')  # Usar mesmo ROE
-        factors['roe_volatility'] = None  # Pode ser implementado depois
+        
+        # ROE Mean 3Y (ADAPTATIVO) - calcular diretamente usando método adaptativo
+        if fundamentals_history:
+            roe_mean, roe_mean_conf = self.calculate_roe_mean_3y(fundamentals_history)
+            factors['roe_mean_3y'] = roe_mean
+            factors['roe_mean_3y_confidence'] = roe_mean_conf
+        else:
+            factors['roe_mean_3y'] = None
+            factors['roe_mean_3y_confidence'] = 0.33
+        
+        # ROE Volatility (ADAPTATIVO)
+        if fundamentals_history:
+            roe_vol, roe_vol_conf = self.calculate_roe_volatility(fundamentals_history)
+            factors['roe_volatility'] = roe_vol
+            factors['roe_volatility_confidence'] = roe_vol_conf
+        else:
+            factors['roe_volatility'] = None
+            factors['roe_volatility_confidence'] = 0.33
+        
         factors['net_margin'] = financial_factors.get('net_margin')
-        factors['revenue_growth_3y'] = financial_factors.get('book_value_growth')  # Crescimento lucro 3Y
-        factors['net_income_volatility'] = None  # Estabilidade do lucro - implementar depois
+        
+        # Revenue Growth 3Y (usar book value growth como proxy para bancos) - ADAPTATIVO
+        if fundamentals_history:
+            # Para bancos, usar crescimento de book value ao invés de receita
+            book_growth, book_growth_conf = self._calculate_book_value_growth_adaptive(fundamentals_history)
+            factors['revenue_growth_3y'] = book_growth
+            factors['revenue_growth_3y_confidence'] = book_growth_conf
+        else:
+            factors['revenue_growth_3y'] = None
+            factors['revenue_growth_3y_confidence'] = 0.33
+        
+        # Net Income Volatility (ADAPTATIVO)
+        if fundamentals_history:
+            net_inc_vol, net_inc_vol_conf = self.calculate_net_income_volatility(fundamentals_history)
+            factors['net_income_volatility'] = net_inc_vol
+            factors['net_income_volatility_confidence'] = net_inc_vol_conf
+        else:
+            factors['net_income_volatility'] = None
+            factors['net_income_volatility_confidence'] = 0.33
+        
         factors['financial_strength'] = None  # Não aplicável para bancos
         
         # Valor (bancos)
@@ -942,7 +1042,21 @@ class FundamentalFactorCalculator:
         factors['roa'] = financial_factors.get('roa')  # ROA específico para bancos
         factors['efficiency_ratio'] = financial_factors.get('efficiency_ratio')  # Índice de eficiência
         
-        logger.info(f"Calculated financial factors for {ticker}")
+        # Overall Confidence Factor
+        confidence_factors = [
+            factors.get('roe_mean_3y_confidence'),
+            factors.get('roe_volatility_confidence'),
+            factors.get('revenue_growth_3y_confidence'),
+            factors.get('net_income_volatility_confidence')
+        ]
+        valid_confidences = [c for c in confidence_factors if c is not None]
+        if valid_confidences:
+            import numpy as np
+            factors['overall_confidence'] = np.mean(valid_confidences)
+        else:
+            factors['overall_confidence'] = 0.66  # Default para bancos
+        
+        logger.info(f"Calculated financial factors for {ticker} with adaptive history")
         return factors
     
     def _calculate_industrial_factors(
@@ -985,27 +1099,23 @@ class FundamentalFactorCalculator:
                 logger.warning(f"Could not calculate ROE for {ticker}: {e}")
                 factors['roe'] = None
         
-        # ROE Mean 3Y (NOVO)
-        if fundamentals_history and len(fundamentals_history) >= 2:
-            try:
-                factors['roe_mean_3y'] = self.calculate_roe_mean_3y(fundamentals_history)
-            except (InsufficientDataError, CalculationError) as e:
-                logger.warning(f"Could not calculate ROE mean 3y for {ticker}: {e}")
-                factors['roe_mean_3y'] = None
+        # ROE Mean 3Y (ADAPTATIVO)
+        if fundamentals_history:
+            roe_mean, roe_mean_conf = self.calculate_roe_mean_3y(fundamentals_history)
+            factors['roe_mean_3y'] = roe_mean
+            factors['roe_mean_3y_confidence'] = roe_mean_conf
         else:
-            logger.warning(f"Insufficient history for ROE mean 3y for {ticker}")
             factors['roe_mean_3y'] = None
+            factors['roe_mean_3y_confidence'] = 0.33
         
-        # ROE Volatility (NOVO)
-        if fundamentals_history and len(fundamentals_history) >= 2:
-            try:
-                factors['roe_volatility'] = self.calculate_roe_volatility(fundamentals_history)
-            except (InsufficientDataError, CalculationError) as e:
-                logger.warning(f"Could not calculate ROE volatility for {ticker}: {e}")
-                factors['roe_volatility'] = None
+        # ROE Volatility (ADAPTATIVO)
+        if fundamentals_history:
+            roe_vol, roe_vol_conf = self.calculate_roe_volatility(fundamentals_history)
+            factors['roe_volatility'] = roe_vol
+            factors['roe_volatility_confidence'] = roe_vol_conf
         else:
-            logger.warning(f"Insufficient history for ROE volatility for {ticker}")
             factors['roe_volatility'] = None
+            factors['roe_volatility_confidence'] = 0.33
         
         # Net Margin
         try:
@@ -1014,31 +1124,23 @@ class FundamentalFactorCalculator:
             logger.warning(f"Could not calculate net margin for {ticker}: {e}")
             factors['net_margin'] = None
         
-        # Revenue Growth 3Y
-        if fundamentals_history and len(fundamentals_history) >= 2:
-            try:
-                factors['revenue_growth_3y'] = self.calculate_revenue_growth_3y(
-                    fundamentals_history
-                )
-            except (InsufficientDataError, CalculationError) as e:
-                logger.warning(f"Could not calculate revenue growth for {ticker}: {e}")
-                factors['revenue_growth_3y'] = None
+        # Revenue Growth 3Y (ADAPTATIVO)
+        if fundamentals_history:
+            revenue_growth, revenue_growth_conf = self.calculate_revenue_growth_3y(fundamentals_history)
+            factors['revenue_growth_3y'] = revenue_growth
+            factors['revenue_growth_3y_confidence'] = revenue_growth_conf
         else:
-            logger.warning(f"Insufficient history for revenue growth for {ticker}")
             factors['revenue_growth_3y'] = None
+            factors['revenue_growth_3y_confidence'] = 0.33
         
-        # Net Income Volatility
-        if fundamentals_history and len(fundamentals_history) >= 2:
-            try:
-                factors['net_income_volatility'] = self.calculate_net_income_volatility(
-                    fundamentals_history
-                )
-            except (InsufficientDataError, CalculationError) as e:
-                logger.warning(f"Could not calculate net income volatility for {ticker}: {e}")
-                factors['net_income_volatility'] = None
+        # Net Income Volatility (ADAPTATIVO)
+        if fundamentals_history:
+            net_inc_vol, net_inc_vol_conf = self.calculate_net_income_volatility(fundamentals_history)
+            factors['net_income_volatility'] = net_inc_vol
+            factors['net_income_volatility_confidence'] = net_inc_vol_conf
         else:
-            logger.warning(f"Insufficient history for net income volatility for {ticker}")
             factors['net_income_volatility'] = None
+            factors['net_income_volatility_confidence'] = 0.33
         
         # Financial Strength
         try:
@@ -1141,5 +1243,19 @@ class FundamentalFactorCalculator:
         except (InsufficientDataError, CalculationError) as e:
             logger.warning(f"Could not calculate size factor for {ticker}: {e}")
             factors['size_factor'] = None
+        
+        # Overall Confidence Factor (média dos confidence factors disponíveis)
+        confidence_factors = [
+            factors.get('roe_mean_3y_confidence'),
+            factors.get('roe_volatility_confidence'),
+            factors.get('revenue_growth_3y_confidence'),
+            factors.get('net_income_volatility_confidence')
+        ]
+        valid_confidences = [c for c in confidence_factors if c is not None]
+        if valid_confidences:
+            import numpy as np
+            factors['overall_confidence'] = np.mean(valid_confidences)
+        else:
+            factors['overall_confidence'] = 0.33
         
         return factors

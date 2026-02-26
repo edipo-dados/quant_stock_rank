@@ -557,6 +557,23 @@ def run_pipeline_docker(
                     logger.warning(f"Sem fundamentos para {ticker}")
                     continue
                 
+                # Buscar histórico de fundamentais (últimos 5 anos para adaptive history)
+                fundamentals_history_raw = db.query(RawFundamental).filter(
+                    RawFundamental.ticker == ticker
+                ).order_by(RawFundamental.period_end_date.asc()).limit(5).all()
+                
+                # Converter histórico para formato dict
+                fundamentals_history = []
+                for f in fundamentals_history_raw:
+                    fundamentals_history.append({
+                        'period_end_date': f.period_end_date,
+                        'revenue': f.revenue,
+                        'net_income': f.net_income,
+                        'shareholders_equity': f.shareholders_equity,
+                        'ebitda': f.ebitda,
+                        'total_assets': f.total_assets
+                    })
+                
                 # Buscar preço atual
                 latest_price = db.query(RawPriceDaily).filter(
                     RawPriceDaily.ticker == ticker
@@ -578,11 +595,11 @@ def run_pipeline_docker(
                     'total_assets': fundamental.total_assets  # Adicionar para ROA
                 }
                 
-                # Calcular fatores (sem histórico por enquanto)
+                # Calcular fatores COM histórico para adaptive history
                 factors = fundamental_calculator.calculate_all_factors(
                     ticker=ticker,
                     fundamentals_data=fundamentals_data,
-                    fundamentals_history=None,  # Sem histórico
+                    fundamentals_history=fundamentals_history if fundamentals_history else None,
                     current_price=current_price
                 )
                 fundamental_factors_dict[ticker] = factors
@@ -654,9 +671,15 @@ def run_pipeline_docker(
         if fundamental_factors_dict:
             fundamental_df = pd.DataFrame(fundamental_factors_dict).T
             
-            # Filtrar apenas colunas numéricas (excluir listas como net_income_history)
+            # Filtrar apenas colunas numéricas (excluir listas como net_income_history e confidence factors)
             numeric_columns = []
+            confidence_columns = ['roe_mean_3y_confidence', 'roe_volatility_confidence', 
+                                'revenue_growth_3y_confidence', 'net_income_volatility_confidence', 
+                                'overall_confidence']
             for col in fundamental_df.columns:
+                # Pular confidence factors - eles não devem ser normalizados
+                if col in confidence_columns:
+                    continue
                 # Verificar se a coluna tem valores não-nulos e se são numéricos
                 if fundamental_df[col].notna().any():
                     # Pegar primeiro valor não-nulo para verificar tipo
@@ -674,10 +697,18 @@ def run_pipeline_docker(
                 
                 normalized_fundamental = normalizer.normalize_factors(fundamental_df_numeric, numeric_columns)
                 
-                # Salvar features mensais
+                # Salvar features mensais (normalized + confidence factors)
                 month_start = date(date.today().year, date.today().month, 1)
+                confidence_columns = ['roe_mean_3y_confidence', 'roe_volatility_confidence', 
+                                    'revenue_growth_3y_confidence', 'net_income_volatility_confidence', 
+                                    'overall_confidence']
                 for ticker in normalized_fundamental.index:
+                    # Combinar features normalizadas com confidence factors (não normalizados)
                     factors = {col: normalized_fundamental.loc[ticker, col] for col in numeric_columns}
+                    # Adicionar confidence factors do DataFrame original
+                    for conf_col in confidence_columns:
+                        if conf_col in fundamental_df.columns:
+                            factors[conf_col] = fundamental_df.loc[ticker, conf_col]
                     feature_service.save_monthly_features(ticker, month_start, factors)
                 
                 db.commit()
@@ -727,12 +758,18 @@ def run_pipeline_docker(
                 if monthly_features:
                     fundamental_factors = {
                         'roe': monthly_features.roe,
+                        'roe_mean_3y': monthly_features.roe_mean_3y,
+                        'roe_volatility': monthly_features.roe_volatility,
                         'net_margin': monthly_features.net_margin,
                         'revenue_growth_3y': monthly_features.revenue_growth_3y,
                         'debt_to_ebitda': monthly_features.debt_to_ebitda,
                         'pe_ratio': monthly_features.pe_ratio,
                         'ev_ebitda': monthly_features.ev_ebitda,
-                        'pb_ratio': monthly_features.pb_ratio
+                        'pb_ratio': monthly_features.pb_ratio,
+                        'price_to_book': monthly_features.price_to_book,
+                        'fcf_yield': monthly_features.fcf_yield,
+                        'size_factor': monthly_features.size_factor,
+                        'overall_confidence': monthly_features.overall_confidence
                     }
                 else:
                     logger.warning(f"Features fundamentalistas faltando para {ticker}, usando apenas momentum")

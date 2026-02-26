@@ -5,6 +5,66 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.6.0] - 2026-02-26
+
+### 🎯 BREAKING CHANGES
+- Sistema agora usa histórico adaptativo (1-3 anos) em vez de exigir exatamente 3 anos
+- Confidence factors aplicados ao quality_score
+
+### ✨ Added
+- **Histórico Adaptativo**: Sistema usa máximo de dados disponíveis (1, 2 ou 3 anos)
+- **Confidence Factors**: Novos campos no schema FeatureMonthly
+  - `roe_mean_3y_confidence`
+  - `roe_volatility_confidence`
+  - `revenue_growth_3y_confidence`
+  - `net_income_volatility_confidence`
+  - `overall_confidence`
+- Métodos adaptativos retornam tuplas `(valor, confidence)`
+- `_calculate_book_value_growth_adaptive()` para instituições financeiras
+- Migration `scripts/migrate_add_confidence_factors.py`
+- Scripts de diagnóstico:
+  - `scripts/test_adaptive_history.py`
+  - `scripts/check_latest_scores.py`
+  - `scripts/debug_scores.py`
+
+### 🔧 Changed
+- `calculate_roe_mean_3y()`: Retorna `(valor, confidence)` em vez de apenas valor
+- `calculate_revenue_growth_3y()`: Retorna `(valor, confidence)`
+- `calculate_roe_volatility()`: Retorna `(valor, confidence)`
+- `calculate_net_income_volatility()`: Retorna `(valor, confidence)`
+- `_calculate_industrial_factors()`: Desempacota tuplas e armazena confidence
+- `_calculate_financial_factors()`: Usa métodos adaptativos para bancos
+- `calculate_quality_score()`: Aplica confidence factor ao score final
+- `calculate_value_score()`: Usa `pb_ratio` como fallback quando `price_to_book` é None
+- Pipeline exclui confidence factors da normalização (são metadados, não features)
+- Pipeline passa todos os campos necessários para scoring engine
+
+### 🐛 Fixed
+- **Scores NaN para ativos sem 3 anos completos**: Agora calculados com confidence reduzido
+- **Instituições financeiras com scores NaN**: Agora usam métodos adaptativos
+- **API retornando 500 errors**: Adicionado `safe_float()` para converter NaN/Infinity para None
+- **ScoreBreakdown com campos obrigatórios**: Todos os campos agora são Optional[float]
+
+### 📊 Results
+```
+Antes (v2.5.2):
+- VALE3: quality=NaN, value=NaN
+- ITUB4: quality=NaN, value=NaN
+- Taxa de elegibilidade: ~60-70%
+
+Depois (v2.6.0):
+- VALE3: quality=-0.022, value=-0.278, confidence=1.0
+- ITUB4: quality=0.156, value=-0.222, confidence=1.0
+- Taxa de elegibilidade: ~80-90%
+```
+
+### 📝 Documentation
+- Criado `ADAPTIVE_HISTORY_IMPLEMENTATION.md` com implementação completa
+- Atualizado procedimento de deploy para EC2
+- Adicionado troubleshooting guide
+
+---
+
 ## [2.5.2] - 2026-02-26
 
 ### 🎯 BREAKING CHANGES

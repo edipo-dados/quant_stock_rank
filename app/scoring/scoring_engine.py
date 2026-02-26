@@ -224,6 +224,13 @@ class ScoringEngine:
         # Calcular média dos fatores disponíveis
         quality_score = sum(quality_factors) / len(quality_factors)
         
+        # NOVO (v2.6.0): Aplicar confidence factor baseado em histórico disponível
+        # Ativos com menos histórico têm peso reduzido
+        overall_confidence = factors.get('overall_confidence', 1.0)
+        if overall_confidence is not None and overall_confidence < 1.0:
+            quality_score = quality_score * overall_confidence
+            logger.debug(f"Applied confidence factor {overall_confidence:.2f} to quality score")
+        
         # REMOVIDO: Penalidades fixas por prejuízo e endividamento
         # O risco já está capturado nos fatores normalizados:
         # - net_income_last_year negativo resulta em score baixo naturalmente
@@ -364,6 +371,12 @@ class ScoringEngine:
         # Verificar fatores críticos
         for factor_name in critical_factors:
             value = factors.get(factor_name)
+            # Se price_to_book não disponível, tentar pb_ratio como fallback
+            if factor_name == 'price_to_book' and (value is None or (isinstance(value, float) and math.isnan(value))):
+                value = factors.get('pb_ratio')
+                if value is not None and not (isinstance(value, float) and math.isnan(value)):
+                    logger.debug(f"Using pb_ratio as fallback for price_to_book")
+            
             if value is not None and not (isinstance(value, float) and math.isnan(value)):
                 value_factors.append(-value)  # Invertido - menor é melhor
             else:
