@@ -270,8 +270,11 @@ async def get_asset_detail(
     
     if feature_daily:
         raw_factors.update({
+            'return_1m': feature_daily.return_1m,
             'return_6m': feature_daily.return_6m,
             'return_12m': feature_daily.return_12m,
+            'momentum_6m_ex_1m': feature_daily.momentum_6m_ex_1m,
+            'momentum_12m_ex_1m': feature_daily.momentum_12m_ex_1m,
             'rsi_14': feature_daily.rsi_14,
             'volatility_90d': feature_daily.volatility_90d,
             'recent_drawdown': feature_daily.recent_drawdown
