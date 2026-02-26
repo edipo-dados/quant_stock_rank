@@ -96,6 +96,23 @@ docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode li
 docker logs -f quant-ranker-backend
 ```
 
+### 8.1. (OPCIONAL) Limpar Dados e Rodar Pipeline FULL do Zero
+
+Se você quiser começar do zero (deletar todos os dados e reprocessar):
+
+```bash
+# ATENÇÃO: Isto DELETA todos os dados! Faça backup antes!
+
+# Opção 1: Usando script Python (recomendado)
+docker exec -it quant-ranker-backend python scripts/clear_and_run_full.py --mode liquid --limit 50
+
+# Opção 2: Usando script bash
+docker exec -it quant-ranker-backend bash scripts/clear_and_run_full.sh liquid 50
+
+# Opção 3: Apenas limpar dados (sem rodar pipeline)
+docker exec -it quant-ranker-backend python scripts/clear_and_run_full.py --clear-only --no-confirm
+```
+
 ### 9. Verificação Pós-Deploy
 
 ```bash
