@@ -627,11 +627,10 @@ def run_pipeline_docker(
                     logger.warning(f"Features de momentum faltando para {ticker}")
                     continue
                 
-                # Preparar fatores de momentum
+                # Preparar fatores de momentum (ACADÊMICOS)
                 momentum_factors = {
-                    'return_6m': daily_features.return_6m,
-                    'return_12m': daily_features.return_12m,
-                    'rsi_14': daily_features.rsi_14,
+                    'momentum_6m_ex_1m': daily_features.momentum_6m_ex_1m,
+                    'momentum_12m_ex_1m': daily_features.momentum_12m_ex_1m,
                     'volatility_90d': daily_features.volatility_90d,
                     'recent_drawdown': daily_features.recent_drawdown
                 }

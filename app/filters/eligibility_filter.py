@@ -49,15 +49,16 @@ class EligibilityFilter:
         - net_income_last_year < 0 (negative profit)
         - net_income negative in 2 of last 3 years
         - net_debt_to_ebitda > 8 (excessive leverage)
-        - Critical momentum factors missing (momentum_6m_ex_1m, momentum_12m_ex_1m)
-        - Critical quality factors missing (roe_mean_3y, net_margin)
-        - Critical value factors missing (pe_ratio, price_to_book)
+        
+        Note: We do NOT check for calculated factors (momentum, quality, value) here
+        because those are computed AFTER eligibility filtering. This filter only
+        validates raw fundamental data and trading volume.
         
         Args:
             ticker: Asset symbol
             fundamentals: Dict with shareholders_equity, ebitda, revenue, 
                          net_income_last_year, net_income_history (list of 3 years),
-                         net_debt_to_ebitda, and all factor values
+                         net_debt_to_ebitda
             volume_data: DataFrame with daily volume history (must have 'volume' column)
         
         Returns:
@@ -135,26 +136,10 @@ class EligibilityFilter:
             if net_debt_to_ebitda is not None and net_debt_to_ebitda > 8:
                 exclusion_reasons.append("excessive_leverage_debt_to_ebitda_gt_8")
         
-        # NEW: Check critical momentum factors
-        critical_momentum = ['momentum_6m_ex_1m', 'momentum_12m_ex_1m']
-        for factor in critical_momentum:
-            value = fundamentals.get(factor)
-            if value is None:
-                exclusion_reasons.append(f"missing_critical_factor_{factor}")
-        
-        # NEW: Check critical quality factors
-        critical_quality = ['roe_mean_3y', 'net_margin']
-        for factor in critical_quality:
-            value = fundamentals.get(factor)
-            if value is None:
-                exclusion_reasons.append(f"missing_critical_factor_{factor}")
-        
-        # NEW: Check critical value factors
-        critical_value = ['pe_ratio', 'price_to_book']
-        for factor in critical_value:
-            value = fundamentals.get(factor)
-            if value is None:
-                exclusion_reasons.append(f"missing_critical_factor_{factor}")
+        # NOTE: We do NOT check for critical factors (momentum, quality, value) here
+        # because those factors are calculated AFTER the eligibility filter passes.
+        # The eligibility filter only checks raw fundamental data and volume.
+        # Missing factors will be handled later in the pipeline when calculating scores.
         
         # Check average daily volume >= minimum_volume (Requirement 1.5)
         if volume_data is None or volume_data.empty:
