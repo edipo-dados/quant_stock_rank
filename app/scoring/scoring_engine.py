@@ -150,9 +150,10 @@ class ScoringEngine:
             if value is not None and not (isinstance(value, float) and math.isnan(value)):
                 momentum_factors.append(-value)  # Invertido - menor é melhor
         
-        # Se nenhum fator disponível, retorna score muito baixo
+        # Se nenhum fator disponível, retorna NaN
         if not momentum_factors:
-            return -999.0
+            import numpy as np
+            return np.nan
         
         # Calcular média dos fatores disponíveis
         momentum_score = sum(momentum_factors) / len(momentum_factors)
@@ -208,15 +209,17 @@ class ScoringEngine:
                 if factor_name in ['roe_mean_3y', 'net_margin']:
                     missing_critical.append(factor_name)
         
-        # Se fatores críticos estão ausentes, retorna None para sinalizar exclusão
+        # Se fatores críticos estão ausentes, retorna NaN
+        # (será tratado no calculate_final_score)
         if missing_critical:
-            logger.warning(f"Critical quality factors missing: {missing_critical}")
-            # Retorna score muito baixo em vez de None para não quebrar o sistema
-            return -999.0
+            logger.debug(f"Critical quality factors missing: {missing_critical}")
+            import numpy as np
+            return np.nan
         
-        # Se nenhum fator disponível, retorna score muito baixo
+        # Se nenhum fator disponível, retorna NaN
         if not quality_factors:
-            return -999.0
+            import numpy as np
+            return np.nan
         
         # Calcular média dos fatores disponíveis
         quality_score = sum(quality_factors) / len(quality_factors)
