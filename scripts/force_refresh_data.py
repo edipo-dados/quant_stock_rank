@@ -3,6 +3,12 @@
 Script para forçar atualização dos dados, removendo dados antigos.
 """
 import sys
+from pathlib import Path
+
+# Adicionar diretório raiz ao path
+root_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(root_dir))
+
 from datetime import date, timedelta
 from app.models.database import SessionLocal
 from app.models.schemas import RawPriceDaily, RawFundamental, ScoreDaily, FeatureDaily, FeatureMonthly

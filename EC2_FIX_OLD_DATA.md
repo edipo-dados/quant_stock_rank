@@ -13,7 +13,7 @@ O pipeline pode estar rodando em modo INCREMENTAL em vez de FULL, ou os scores a
 ### 1. Verificar Datas dos Dados
 
 ```bash
-docker exec quant-ranker-backend python scripts/check_data_dates.py
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/check_data_dates.py"
 ```
 
 Isso mostrará:
@@ -39,7 +39,9 @@ Procure por:
 
 ```bash
 # 1. Limpar scores antigos (mantém últimos 7 dias)
-docker exec quant-ranker-backend python -c "
+docker exec quant-ranker-backend bash -c "cd /app && python -c \"
+import sys
+sys.path.insert(0, '/app')
 from app.models.database import SessionLocal
 from app.models.schemas import ScoreDaily
 from datetime import date, timedelta
@@ -50,13 +52,13 @@ deleted = db.query(ScoreDaily).filter(ScoreDaily.date < cutoff).delete()
 db.commit()
 print(f'✅ Scores antigos removidos: {deleted}')
 db.close()
-"
+\""
 
 # 2. Executar pipeline FULL
-docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full"
 
 # 3. Verificar dados
-docker exec quant-ranker-backend python scripts/check_data_dates.py
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/check_data_dates.py"
 
 # 4. Reiniciar containers
 docker-compose restart backend frontend
@@ -99,7 +101,9 @@ docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode li
 ### 1. Verificar Data dos Scores
 
 ```bash
-docker exec quant-ranker-backend python -c "
+docker exec quant-ranker-backend bash -c "cd /app && python -c \"
+import sys
+sys.path.insert(0, '/app')
 from app.models.database import SessionLocal
 from app.models.schemas import ScoreDaily
 from datetime import date
@@ -109,7 +113,7 @@ today = date.today()
 scores = db.query(ScoreDaily).filter(ScoreDaily.date == today).count()
 print(f'Scores de hoje ({today}): {scores}')
 db.close()
-"
+\""
 ```
 
 Deve mostrar > 0 scores para hoje.
@@ -208,7 +212,9 @@ if args.force_full:
 docker logs quant-ranker-backend | grep -A 10 "ERROR"
 
 # Verificar elegibilidade
-docker exec quant-ranker-backend python -c "
+docker exec quant-ranker-backend bash -c "cd /app && python -c \"
+import sys
+sys.path.insert(0, '/app')
 from app.models.database import SessionLocal
 from app.models.schemas import ScoreDaily
 from datetime import date
@@ -220,7 +226,7 @@ scores = db.query(ScoreDaily).filter(
 ).count()
 print(f'Ativos elegíveis hoje: {scores}')
 db.close()
-"
+\""
 ```
 
 ### Frontend Mostra Data Antiga
@@ -250,7 +256,9 @@ docker-compose up -d --build frontend
 **Solução:**
 ```bash
 # Verificar se há scores
-docker exec quant-ranker-backend python -c "
+docker exec quant-ranker-backend bash -c "cd /app && python -c \"
+import sys
+sys.path.insert(0, '/app')
 from app.models.database import SessionLocal
 from app.models.schemas import ScoreDaily
 
@@ -258,10 +266,10 @@ db = SessionLocal()
 count = db.query(ScoreDaily).count()
 print(f'Total de scores no banco: {count}')
 db.close()
-"
+\""
 
 # Se 0, executar pipeline
-docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full
+docker exec quant-ranker-backend bash -c "cd /app && python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full"
 ```
 
 ## Comandos Úteis
@@ -271,7 +279,9 @@ docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode li
 docker logs quant-ranker-backend --tail 200 | grep "RESUMO DO PIPELINE" -A 20
 
 # Verificar scores de hoje
-docker exec quant-ranker-backend python -c "
+docker exec quant-ranker-backend bash -c "cd /app && python -c \"
+import sys
+sys.path.insert(0, '/app')
 from app.models.database import SessionLocal
 from app.models.schemas import ScoreDaily
 from datetime import date
@@ -281,7 +291,7 @@ scores = db.query(ScoreDaily).filter(ScoreDaily.date == date.today()).all()
 for s in scores[:5]:
     print(f'{s.ticker}: {s.final_score:.3f}')
 db.close()
-"
+\""
 
 # Limpar cache do Docker
 docker system prune -f

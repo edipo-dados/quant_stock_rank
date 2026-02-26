@@ -2,6 +2,13 @@
 """
 Script para verificar as datas dos dados no banco.
 """
+import sys
+from pathlib import Path
+
+# Adicionar diretório raiz ao path
+root_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(root_dir))
+
 from app.models.database import SessionLocal
 from app.models.schemas import RawPriceDaily, RawFundamental, ScoreDaily
 from sqlalchemy import func
@@ -47,8 +54,8 @@ def check_data_dates():
         print("💼 FUNDAMENTOS (raw_fundamentals)")
         print("-" * 80)
         
-        latest_fundamental = db.query(func.max(RawFundamental.date)).scalar()
-        oldest_fundamental = db.query(func.min(RawFundamental.date)).scalar()
+        latest_fundamental = db.query(func.max(RawFundamental.period_end_date)).scalar()
+        oldest_fundamental = db.query(func.min(RawFundamental.period_end_date)).scalar()
         total_fundamentals = db.query(RawFundamental).count()
         tickers_with_fundamentals = db.query(RawFundamental.ticker).distinct().count()
         
@@ -60,8 +67,8 @@ def check_data_dates():
         if latest_fundamental:
             days_old = (today - latest_fundamental).days
             print(f"Idade dos dados: {days_old} dias")
-            if days_old > 1:
-                print(f"⚠️  ATENÇÃO: Dados de fundamentos estão desatualizados!")
+            if days_old > 90:  # Fundamentos são trimestrais
+                print(f"⚠️  ATENÇÃO: Dados de fundamentos podem estar desatualizados!")
         print()
         
         # Verificar scores
@@ -122,7 +129,7 @@ def check_data_dates():
         else:
             print("✅ Preços atualizados")
             
-        if not latest_fundamental or (today - latest_fundamental).days > 1:
+        if not latest_fundamental or (today - latest_fundamental).days > 90:
             print("❌ Fundamentos desatualizados")
             all_ok = False
         else:
