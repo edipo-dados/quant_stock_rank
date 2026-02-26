@@ -24,6 +24,26 @@ class FundamentalFactorCalculator:
         from app.factor_engine.normalizer import CrossSectionalNormalizer
         self.normalizer = CrossSectionalNormalizer()
     
+    def _calculate_confidence_factor(self, periods_available: int, periods_ideal: int = 3) -> float:
+        """
+        Calcula fator de confiança baseado no histórico disponível.
+        
+        Args:
+            periods_available: Número de períodos disponíveis
+            periods_ideal: Número ideal de períodos (padrão: 3)
+            
+        Returns:
+            Fator de confiança entre 0 e 1
+            
+        Examples:
+            3 anos → 1.0
+            2 anos → 0.66
+            1 ano → 0.33
+        """
+        if periods_available >= periods_ideal:
+            return 1.0
+        return periods_available / periods_ideal
+    
     def calculate_roe_robust(
         self,
         fundamentals_history: List[Dict],
@@ -174,107 +194,113 @@ class FundamentalFactorCalculator:
         except (TypeError, ZeroDivisionError) as e:
             raise CalculationError(f"Error calculating net margin: {e}")
     
-    def calculate_revenue_growth_3y(self, fundamentals_history: List[Dict]) -> float:
+    def calculate_revenue_growth_3y(self, fundamentals_history: List[Dict]) -> Tuple[float, float]:
         """
-        Calcula crescimento de receita de 3 anos (CAGR).
+        Calcula crescimento de receita usando histórico adaptativo.
         
-        CAGR = (Revenue_final / Revenue_initial)^(1/years) - 1
+        HISTÓRICO ADAPTATIVO:
+        - 3+ anos → CAGR 3Y
+        - 2 anos → crescimento simples entre os dois anos
+        - 1 ano → usa último valor (crescimento = 0)
+        - 0 anos → retorna (None, 0.33)
         
         Args:
             fundamentals_history: Lista de dicts ordenados cronologicamente,
                                  cada um contendo revenue
             
         Returns:
-            CAGR de 3 anos como float
+            Tuple (growth_rate, confidence_factor)
+            - growth_rate: Taxa de crescimento ou None
+            - confidence_factor: 0.33 a 1.0 baseado em períodos disponíveis
             
-        Raises:
-            InsufficientDataError: Se não há dados suficientes (mínimo 2 períodos)
-            CalculationError: Se revenue inicial é zero ou negativo
-            
-        Valida: Requisito 2.3
+        Valida: Requisito 2.3 (adaptativo)
         """
         try:
-            if len(fundamentals_history) < 2:
-                raise InsufficientDataError(
-                    f"Need at least 2 periods for revenue growth, got {len(fundamentals_history)}"
-                )
+            periods = len(fundamentals_history)
+            
+            if periods == 0:
+                return (None, 0.33)
+            
+            if periods == 1:
+                # Apenas 1 período: não há crescimento para calcular
+                return (0.0, 0.33)
             
             # Pegar primeiro e último período
             initial = fundamentals_history[0].get('revenue')
             final = fundamentals_history[-1].get('revenue')
             
             if initial is None or final is None:
-                raise InsufficientDataError(
-                    "Missing revenue data in fundamentals history"
-                )
+                return (None, self._calculate_confidence_factor(periods))
             
             if initial <= 0:
-                raise CalculationError(
-                    f"Invalid initial revenue for growth calculation: {initial}"
-                )
+                return (None, self._calculate_confidence_factor(periods))
             
             # Calcular número de anos entre períodos
-            years = len(fundamentals_history) - 1
+            years = periods - 1
             
-            if years == 0:
-                raise InsufficientDataError("Need at least 2 different periods")
+            if years == 1:
+                # 2 períodos: crescimento simples
+                growth = (final / initial) - 1
+            else:
+                # 3+ períodos: CAGR
+                growth = (final / initial) ** (1 / years) - 1
             
-            # CAGR = (final/initial)^(1/years) - 1
-            cagr = (final / initial) ** (1 / years) - 1
+            confidence = self._calculate_confidence_factor(periods)
             
-            return cagr
+            return (growth, confidence)
             
         except (TypeError, ValueError, ZeroDivisionError) as e:
-            raise CalculationError(f"Error calculating revenue growth: {e}")
+            logger.warning(f"Error calculating revenue growth: {e}")
+            return (None, 0.33)
 
-    def calculate_roe_mean_3y(self, fundamentals_history: List[Dict]) -> float:
+    def calculate_roe_mean_3y(self, fundamentals_history: List[Dict]) -> Tuple[Optional[float], float]:
         """
-        Calcula ROE médio dos últimos 3 anos.
+        Calcula ROE médio usando histórico adaptativo.
         
-        ROE_mean = mean(ROE_year1, ROE_year2, ROE_year3)
+        HISTÓRICO ADAPTATIVO:
+        - 3+ anos → média de 3 anos
+        - 2 anos → média de 2 anos
+        - 1 ano → usa último valor
+        - 0 anos → retorna (None, 0.33)
         
         Args:
             fundamentals_history: Lista de dicts ordenados cronologicamente,
                                  cada um contendo net_income e shareholders_equity
             
         Returns:
-            ROE médio como float
-            
-        Raises:
-            InsufficientDataError: Se não há dados suficientes (mínimo 2 períodos)
-            CalculationError: Se shareholders_equity é zero ou negativo
+            Tuple (roe_mean, confidence_factor)
+            - roe_mean: ROE médio ou None
+            - confidence_factor: 0.33 a 1.0 baseado em períodos disponíveis
         """
         try:
-            if len(fundamentals_history) < 2:
-                raise InsufficientDataError(
-                    f"Need at least 2 periods for ROE mean, got {len(fundamentals_history)}"
-                )
+            periods = len(fundamentals_history)
             
-            # Calcular ROE para cada período
+            if periods == 0:
+                return (None, 0.33)
+            
+            # Calcular ROE para cada período disponível
             roes = []
             for period in fundamentals_history:
                 net_income = period.get('net_income')
                 shareholders_equity = period.get('shareholders_equity')
                 
-                if net_income is None or shareholders_equity is None:
-                    raise InsufficientDataError(
-                        "Missing net_income or shareholders_equity in fundamentals history"
-                    )
-                
-                if shareholders_equity <= 0:
-                    raise CalculationError(
-                        f"Invalid shareholders_equity for ROE: {shareholders_equity}"
-                    )
-                
-                roe = net_income / shareholders_equity
-                roes.append(roe)
+                if net_income is not None and shareholders_equity is not None and shareholders_equity > 0:
+                    roe = net_income / shareholders_equity
+                    roes.append(roe)
             
-            # Calcular média
+            if not roes:
+                return (None, self._calculate_confidence_factor(periods))
+            
+            # Calcular média dos ROEs disponíveis
             import numpy as np
-            return np.mean(roes)
+            roe_mean = np.mean(roes)
+            confidence = self._calculate_confidence_factor(len(roes))
+            
+            return (roe_mean, confidence)
             
         except (TypeError, ValueError, ZeroDivisionError) as e:
-            raise CalculationError(f"Error calculating ROE mean: {e}")
+            logger.warning(f"Error calculating ROE mean: {e}")
+            return (None, 0.33)
     
     def calculate_roe_volatility(self, fundamentals_history: List[Dict]) -> float:
         """
