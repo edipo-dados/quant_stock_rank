@@ -1,8 +1,16 @@
 """
-Eligibility filter for pre-screening financially distressed assets.
+Eligibility filter for structural pre-screening of assets.
 
-This module implements the eligibility filter layer that excludes assets
-failing minimum financial health criteria before scoring.
+This module implements LAYER 1 of the pipeline: Structural Eligibility.
+It uses ONLY raw fundamental data and price history, never derived features.
+
+CRITICAL: This filter must NOT check for calculated features (momentum, quality, value).
+Those are computed in LAYER 2 (Feature Engineering) AFTER this filter passes.
+
+Architecture:
+- LAYER 1: Structural Eligibility (this module) - raw data only
+- LAYER 2: Feature Engineering - calculate all derived features
+- LAYER 3: Scoring & Normalization - rank assets
 
 Validates: Requirements 1.1, 1.2, 1.3, 1.4, 1.5, 1.6
 """
@@ -39,31 +47,40 @@ class EligibilityFilter:
         volume_data: pd.DataFrame
     ) -> Tuple[bool, List[str]]:
         """
-        Check if asset meets minimum eligibility criteria.
+        Check if asset meets STRUCTURAL eligibility criteria.
         
-        Exclusion criteria:
-        - shareholders_equity <= 0
+        LAYER 1: STRUCTURAL ELIGIBILITY - Uses ONLY raw data
+        
+        This filter checks ONLY:
+        1. Raw fundamental data availability and validity
+        2. Trading volume sufficiency
+        3. Basic financial health (not distressed)
+        
+        CRITICAL: This filter does NOT check derived features like:
+        - ev_ebitda, fcf_yield (calculated in Layer 2)
+        - momentum_ex_1m, roe_mean_3y (calculated in Layer 2)
+        - size_factor, normalized scores (calculated in Layer 3)
+        
+        Structural exclusion criteria:
+        - shareholders_equity <= 0 (negative equity = bankruptcy risk)
         - ebitda <= 0 (except financial institutions)
-        - revenue <= 0
-        - average daily volume < minimum_volume
-        - net_income_last_year < 0 (negative profit)
-        - net_income negative in 2 of last 3 years
-        - net_debt_to_ebitda > 8 (excessive leverage)
-        
-        Note: We do NOT check for calculated factors (momentum, quality, value) here
-        because those are computed AFTER eligibility filtering. This filter only
-        validates raw fundamental data and trading volume.
+        - revenue <= 0 (no business activity)
+        - average daily volume < minimum_volume (illiquid)
+        - net_income_last_year < 0 (current losses)
+        - net_income negative in 2 of last 3 years (persistent losses)
+        - net_debt_to_ebitda > 8 (excessive leverage, distress risk)
         
         Args:
             ticker: Asset symbol
-            fundamentals: Dict with shareholders_equity, ebitda, revenue, 
+            fundamentals: Dict with RAW fundamental data:
+                         shareholders_equity, ebitda, revenue, 
                          net_income_last_year, net_income_history (list of 3 years),
                          net_debt_to_ebitda
             volume_data: DataFrame with daily volume history (must have 'volume' column)
         
         Returns:
             Tuple of (is_eligible, exclusion_reasons)
-            - is_eligible: True if asset passes all criteria
+            - is_eligible: True if asset passes all structural criteria
             - exclusion_reasons: List of reasons for exclusion (empty if eligible)
         
         Validates: Requirements 1.2, 1.3, 1.4, 1.5, 1.6

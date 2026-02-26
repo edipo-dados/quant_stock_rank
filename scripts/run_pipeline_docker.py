@@ -467,16 +467,50 @@ def run_pipeline_docker(
         logger.info("ETAPA 3: PROCESSAMENTO DE FEATURES E SCORES")
         logger.info("=" * 80)
         
-        # Filtro de elegibilidade
+        # ========================================================================
+        # LAYER 1: STRUCTURAL ELIGIBILITY
+        # ========================================================================
+        logger.info("\n🔍 LAYER 1: STRUCTURAL ELIGIBILITY (raw data only)")
+        logger.info(f"Total ativos iniciais: {len(tickers)}")
+        
+        # Filtro de elegibilidade estrutural
         feature_service = FeatureService(db)
         eligible_tickers, exclusion_reasons = feature_service.filter_eligible_assets(
             tickers, date.today()
         )
         
-        logger.info(f"Elegibilidade: {len(eligible_tickers)} elegíveis, {len(exclusion_reasons)} excluídos")
+        logger.info(f"✅ Ativos elegíveis (estrutural): {len(eligible_tickers)}")
+        logger.info(f"❌ Ativos excluídos (estrutural): {len(exclusion_reasons)}")
+        
+        if len(exclusion_reasons) > 0:
+            logger.info("\nRazões de exclusão estrutural:")
+            for ticker, reasons in list(exclusion_reasons.items())[:5]:
+                logger.info(f"  {ticker}: {', '.join(reasons)}")
+            if len(exclusion_reasons) > 5:
+                logger.info(f"  ... e mais {len(exclusion_reasons) - 5} ativos")
+        
+        # Verificar se temos ativos suficientes
+        if len(eligible_tickers) == 0:
+            logger.error("❌ NENHUM ativo passou no filtro estrutural!")
+            logger.error("Verifique se há dados fundamentais e de preços no banco.")
+            tracker.complete_execution(status='FAILED')
+            return
+        
+        eligibility_rate = len(eligible_tickers) / len(tickers) * 100
+        logger.info(f"📊 Taxa de elegibilidade: {eligibility_rate:.1f}%")
+        
+        if eligibility_rate < 80:
+            logger.warning(f"⚠️  Taxa de elegibilidade baixa ({eligibility_rate:.1f}% < 80%)")
+            logger.warning("Isso pode indicar dados fundamentais incompletos.")
+        
+        # ========================================================================
+        # LAYER 2: FEATURE ENGINEERING
+        # ========================================================================
+        logger.info("\n🔧 LAYER 2: FEATURE ENGINEERING (calculate all features)")
+        logger.info(f"Calculando features para {len(eligible_tickers)} ativos elegíveis...")
         
         # Calcular features de momentum
-        logger.info("Calculando features de momentum...")
+        logger.info("\n📈 Calculando features de momentum...")
         momentum_calculator = MomentumFactorCalculator()
         momentum_factors_dict = {}
         
@@ -505,10 +539,10 @@ def run_pipeline_docker(
             except Exception as e:
                 logger.warning(f"Erro ao calcular momentum para {ticker}: {e}")
         
-        logger.info(f"Momentum: {len(momentum_factors_dict)}/{len(eligible_tickers)} calculados")
+        logger.info(f"✅ Momentum: {len(momentum_factors_dict)}/{len(eligible_tickers)} calculados")
         
         # Calcular features fundamentalistas
-        logger.info("Calculando features fundamentalistas...")
+        logger.info("\n💼 Calculando features fundamentalistas...")
         fundamental_calculator = FundamentalFactorCalculator()
         fundamental_factors_dict = {}
         
@@ -558,16 +592,54 @@ def run_pipeline_docker(
                 import traceback
                 logger.debug(f"Traceback: {traceback.format_exc()}")
         
-        logger.info(f"Fundamentos: {len(fundamental_factors_dict)}/{len(eligible_tickers)} calculados")
+        logger.info(f"✅ Fundamentos: {len(fundamental_factors_dict)}/{len(eligible_tickers)} calculados")
         
-        # Normalizar e salvar features
-        logger.info("Normalizando e salvando features...")
+        # Log de missing values ANTES da imputação
+        logger.info("\n📊 Análise de missing values (antes da imputação):")
+        
+        # Combinar todos os fatores para análise
+        all_factors_for_analysis = {}
+        for ticker in eligible_tickers:
+            combined = {}
+            if ticker in momentum_factors_dict:
+                combined.update(momentum_factors_dict[ticker])
+            if ticker in fundamental_factors_dict:
+                combined.update(fundamental_factors_dict[ticker])
+            all_factors_for_analysis[ticker] = combined
+        
+        if all_factors_for_analysis:
+            analysis_df = pd.DataFrame(all_factors_for_analysis).T
+            missing_counts = analysis_df.isnull().sum()
+            total_missing = missing_counts.sum()
+            
+            logger.info(f"Total missing values: {total_missing}")
+            if total_missing > 0:
+                logger.info("Missing por feature:")
+                for col in missing_counts[missing_counts > 0].index:
+                    pct = missing_counts[col] / len(analysis_df) * 100
+                    logger.info(f"  - {col}: {missing_counts[col]} ({pct:.1f}%)")
+        
+        # ========================================================================
+        # LAYER 2.5: MISSING VALUE IMPUTATION
+        # ========================================================================
+        logger.info("\n🔄 LAYER 2.5: MISSING VALUE IMPUTATION")
+        logger.info("Imputando valores faltantes usando medianas setoriais/universais...")
+        
+        from app.factor_engine.missing_handler import MissingValueHandler
+        missing_handler = MissingValueHandler()
+        
+        # Normalizar e salvar features (com imputação integrada)
+        logger.info("\n📊 Normalizando e salvando features...")
         normalizer = CrossSectionalNormalizer()
         
         # Normalizar momentum
         if momentum_factors_dict:
             momentum_df = pd.DataFrame(momentum_factors_dict).T
             momentum_columns = [col for col in momentum_df.columns if momentum_df[col].notna().any()]
+            
+            # Impute missing values BEFORE normalization
+            momentum_df = missing_handler.impute_missing_features(momentum_df)
+            
             normalized_momentum = normalizer.normalize_factors(momentum_df, momentum_columns)
             
             # Salvar features diárias
@@ -576,7 +648,7 @@ def run_pipeline_docker(
                 feature_service.save_daily_features(ticker, date.today(), factors)
             
             db.commit()
-            logger.info(f"Features diárias salvas: {len(normalized_momentum)} tickers")
+            logger.info(f"✅ Features diárias salvas: {len(normalized_momentum)} tickers")
         
         # Normalizar fundamentalistas
         if fundamental_factors_dict:
@@ -593,10 +665,14 @@ def run_pipeline_docker(
                     if first_value is not None and isinstance(first_value, (int, float)) and not isinstance(first_value, bool):
                         numeric_columns.append(col)
             
-            logger.info(f"Colunas numéricas para normalização: {numeric_columns}")
+            logger.info(f"Colunas numéricas para normalização: {len(numeric_columns)}")
             
             if numeric_columns:
-                normalized_fundamental = normalizer.normalize_factors(fundamental_df, numeric_columns)
+                # Impute missing values BEFORE normalization
+                fundamental_df_numeric = fundamental_df[numeric_columns]
+                fundamental_df_numeric = missing_handler.impute_missing_features(fundamental_df_numeric)
+                
+                normalized_fundamental = normalizer.normalize_factors(fundamental_df_numeric, numeric_columns)
                 
                 # Salvar features mensais
                 month_start = date(date.today().year, date.today().month, 1)
@@ -605,12 +681,23 @@ def run_pipeline_docker(
                     feature_service.save_monthly_features(ticker, month_start, factors)
                 
                 db.commit()
-                logger.info(f"Features mensais salvas: {len(normalized_fundamental)} tickers")
+                logger.info(f"✅ Features mensais salvas: {len(normalized_fundamental)} tickers")
             else:
-                logger.warning("Nenhuma coluna numérica encontrada para normalização")
+                logger.warning("⚠️  Nenhuma coluna numérica encontrada para normalização")
         
-        # Calcular scores
-        logger.info("Calculando scores...")
+        # Log imputation summary
+        imputation_summary = missing_handler.get_imputation_summary()
+        if not imputation_summary.empty:
+            logger.info(f"\n📋 Resumo de imputações: {len(imputation_summary)} valores imputados")
+            by_method = imputation_summary.groupby('method').size()
+            for method, count in by_method.items():
+                logger.info(f"  - {method}: {count} imputações")
+        
+        # ========================================================================
+        # LAYER 3: SCORING & NORMALIZATION
+        # ========================================================================
+        logger.info("\n🎯 LAYER 3: SCORING & NORMALIZATION")
+        logger.info("Calculando scores finais...")
         scoring_engine = ScoringEngine(settings)
         score_service = ScoreService(db)
         confidence_engine = ConfidenceEngine()
@@ -666,12 +753,33 @@ def run_pipeline_docker(
             except Exception as e:
                 logger.warning(f"Erro ao calcular score para {ticker}: {e}")
         
-        logger.info(f"Scores: {scores_calculated}/{len(eligible_tickers)} calculados")
+        logger.info(f"✅ Scores calculados: {scores_calculated}/{len(eligible_tickers)}")
         
         # Atualizar ranks
-        logger.info("Atualizando ranking...")
+        logger.info("\n📊 Atualizando ranking...")
         score_service.update_ranks(date.today())
         ranking_size = scores_calculated
+        
+        logger.info(f"✅ Ranking atualizado: {ranking_size} ativos")
+        
+        # ========================================================================
+        # PIPELINE SUMMARY
+        # ========================================================================
+        logger.info("\n" + "=" * 80)
+        logger.info("📊 RESUMO DO PIPELINE")
+        logger.info("=" * 80)
+        logger.info(f"LAYER 1 - Elegibilidade Estrutural:")
+        logger.info(f"  • Ativos iniciais: {len(tickers)}")
+        logger.info(f"  • Ativos elegíveis: {len(eligible_tickers)} ({eligibility_rate:.1f}%)")
+        logger.info(f"  • Ativos excluídos: {len(exclusion_reasons)}")
+        logger.info(f"\nLAYER 2 - Feature Engineering:")
+        logger.info(f"  • Momentum calculado: {len(momentum_factors_dict)}")
+        logger.info(f"  • Fundamentos calculados: {len(fundamental_factors_dict)}")
+        logger.info(f"  • Valores imputados: {len(imputation_summary) if not imputation_summary.empty else 0}")
+        logger.info(f"\nLAYER 3 - Scoring:")
+        logger.info(f"  • Scores calculados: {scores_calculated}")
+        logger.info(f"  • Ranking final: {ranking_size} ativos")
+        logger.info("=" * 80)
         
         # Atualizar estatísticas finais
         tracker.update_stats(
