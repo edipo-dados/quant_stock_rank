@@ -81,10 +81,10 @@ class ScoreBreakdown(BaseModel):
         date: Data do score
         final_score: Score final após penalidades
         base_score: Score base antes das penalidades de risco
-        momentum_score: Score de momentum
-        quality_score: Score de qualidade
-        value_score: Score de valor
-        confidence: Score de confiança (0-1)
+        momentum_score: Score de momentum (pode ser None se não calculado)
+        quality_score: Score de qualidade (pode ser None se não calculado)
+        value_score: Score de valor (pode ser None se não calculado)
+        confidence: Score de confiança (0-1, pode ser None)
         passed_eligibility: Se o ativo passou pelo filtro de elegibilidade
         exclusion_reasons: Lista de razões de exclusão se não passou no filtro
         risk_penalties: Dicionário com breakdown das penalidades aplicadas
@@ -93,16 +93,16 @@ class ScoreBreakdown(BaseModel):
     """
     ticker: str = Field(..., description="Símbolo do ativo")
     date: date_type = Field(..., description="Data do score")
-    final_score: float = Field(..., description="Score final após penalidades")
-    base_score: float = Field(..., description="Score base antes das penalidades de risco")
-    momentum_score: float = Field(..., description="Score de momentum")
-    quality_score: float = Field(..., description="Score de qualidade")
-    value_score: float = Field(..., description="Score de valor")
-    confidence: float = Field(..., ge=0, le=1, description="Score de confiança (0-1)")
+    final_score: Optional[float] = Field(None, description="Score final após penalidades")
+    base_score: Optional[float] = Field(None, description="Score base antes das penalidades de risco")
+    momentum_score: Optional[float] = Field(None, description="Score de momentum")
+    quality_score: Optional[float] = Field(None, description="Score de qualidade")
+    value_score: Optional[float] = Field(None, description="Score de valor")
+    confidence: Optional[float] = Field(None, ge=0, le=1, description="Score de confiança (0-1)")
     passed_eligibility: bool = Field(..., description="Se o ativo passou pelo filtro de elegibilidade")
     exclusion_reasons: List[str] = Field(default_factory=list, description="Lista de razões de exclusão")
     risk_penalties: Dict[str, float] = Field(default_factory=dict, description="Breakdown das penalidades aplicadas")
-    penalty_factor: float = Field(..., description="Fator de penalidade combinado")
+    penalty_factor: Optional[float] = Field(None, description="Fator de penalidade combinado")
     rank: Optional[int] = Field(None, description="Posição no ranking")
     
     model_config = ConfigDict(

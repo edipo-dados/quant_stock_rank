@@ -88,6 +88,16 @@ def _score_daily_to_score_breakdown(score_daily: ScoreDaily) -> ScoreBreakdown:
     Returns:
         ScoreBreakdown: Schema Pydantic com breakdown detalhado
     """
+    import math
+    
+    def safe_float(value):
+        """Converte NaN/Infinity para None para serialização JSON."""
+        if value is None:
+            return None
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return value
+    
     # Extrair risk_penalties do JSON, usar dict vazio se None
     risk_penalties = score_daily.risk_penalties if score_daily.risk_penalties else {}
     
@@ -95,24 +105,25 @@ def _score_daily_to_score_breakdown(score_daily: ScoreDaily) -> ScoreBreakdown:
     exclusion_reasons = score_daily.exclusion_reasons if score_daily.exclusion_reasons else []
     
     # Calcular penalty_factor: se não houver base_score, usar 1.0
-    if score_daily.base_score and score_daily.base_score != 0:
-        penalty_factor = score_daily.final_score / score_daily.base_score
+    base_score_safe = safe_float(score_daily.base_score)
+    if base_score_safe and base_score_safe != 0:
+        penalty_factor = safe_float(score_daily.final_score) / base_score_safe
     else:
-        penalty_factor = score_daily.risk_penalty_factor if score_daily.risk_penalty_factor else 1.0
+        penalty_factor = safe_float(score_daily.risk_penalty_factor) if score_daily.risk_penalty_factor else 1.0
     
     return ScoreBreakdown(
         ticker=score_daily.ticker,
         date=score_daily.date,
-        final_score=score_daily.final_score,
-        base_score=score_daily.base_score if score_daily.base_score else score_daily.final_score,
-        momentum_score=score_daily.momentum_score,
-        quality_score=score_daily.quality_score,
-        value_score=score_daily.value_score,
-        confidence=score_daily.confidence,
+        final_score=safe_float(score_daily.final_score),
+        base_score=base_score_safe if base_score_safe else safe_float(score_daily.final_score),
+        momentum_score=safe_float(score_daily.momentum_score),
+        quality_score=safe_float(score_daily.quality_score),
+        value_score=safe_float(score_daily.value_score),
+        confidence=safe_float(score_daily.confidence),
         passed_eligibility=score_daily.passed_eligibility if score_daily.passed_eligibility is not None else True,
         exclusion_reasons=exclusion_reasons,
         risk_penalties=risk_penalties,
-        penalty_factor=penalty_factor,
+        penalty_factor=safe_float(penalty_factor),
         rank=score_daily.rank
     )
 
