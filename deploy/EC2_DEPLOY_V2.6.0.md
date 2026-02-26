@@ -79,9 +79,9 @@ docker exec quant-ranker-backend python scripts/migrate_add_confidence_factors.p
 # Verificar se migration foi bem-sucedida
 docker exec quant-ranker-backend python -c "
 from app.models.database import get_db
-from app.models.schemas import FeatureMonthly
+from sqlalchemy import text
 db = next(get_db())
-result = db.execute('SELECT column_name FROM information_schema.columns WHERE table_name = \\'features_monthly\\' AND column_name LIKE \\'%confidence%\\'')
+result = db.execute(text('SELECT column_name FROM information_schema.columns WHERE table_name = \\'features_monthly\\' AND column_name LIKE \\'%confidence%\\''))
 print('Confidence columns:', [row[0] for row in result])
 "
 ```
@@ -147,8 +147,9 @@ for f in features:
 # Verificar se migration foi executada
 docker exec quant-ranker-backend python -c "
 from app.models.database import get_db
+from sqlalchemy import text
 db = next(get_db())
-result = db.execute('SELECT column_name FROM information_schema.columns WHERE table_name = \\'features_monthly\\' AND column_name = \\'overall_confidence\\'')
+result = db.execute(text('SELECT column_name FROM information_schema.columns WHERE table_name = \\'features_monthly\\' AND column_name = \\'overall_confidence\\''))
 print('Has overall_confidence:', result.fetchone() is not None)
 "
 
