@@ -366,10 +366,12 @@ class ScoringEngine:
             else:
                 missing_critical.append(factor_name)
         
-        # Se fatores críticos estão ausentes, retorna score muito baixo
+        # Se fatores críticos estão ausentes, retorna NaN
+        # (será tratado no calculate_final_score)
         if missing_critical:
-            logger.warning(f"Critical value factors missing: {missing_critical}")
-            return -999.0
+            logger.debug(f"Critical value factors missing: {missing_critical}")
+            import numpy as np
+            return np.nan
         
         # Adicionar fatores secundários se disponíveis
         for factor_name in secondary_factors:
@@ -380,9 +382,10 @@ class ScoringEngine:
                 else:
                     value_factors.append(-value)  # Outros: invertido - menor é melhor
         
-        # Se nenhum fator disponível, retorna score muito baixo
+        # Se nenhum fator disponível, retorna NaN
         if not value_factors:
-            return -999.0
+            import numpy as np
+            return np.nan
         
         # Calcular média dos fatores disponíveis
         value_score = sum(value_factors) / len(value_factors)
@@ -430,28 +433,55 @@ class ScoringEngine:
         """
         Calcula score final como média ponderada dos scores.
         
+        TRATAMENTO DE NaN:
+        - Se um score for NaN, seu peso é redistribuído proporcionalmente
+        - Se TODOS os scores forem NaN, retorna 0.0
+        
         final_score = (momentum_weight * momentum_score +
                       quality_weight * quality_score +
                       value_weight * value_score +
                       size_weight * size_score)
         
         Args:
-            momentum_score: Score de momentum
-            quality_score: Score de qualidade
-            value_score: Score de valor
-            size_score: Score de tamanho (opcional, default 0.0)
+            momentum_score: Score de momentum (pode ser NaN)
+            quality_score: Score de qualidade (pode ser NaN)
+            value_score: Score de valor (pode ser NaN)
+            size_score: Score de tamanho (opcional, default 0.0, pode ser NaN)
             
         Returns:
             Score final ponderado
             
         Valida: Requisitos 4.1, 4.2, 4.3, 4.4
         """
-        final_score = (
-            self.momentum_weight * momentum_score +
-            self.quality_weight * quality_score +
-            self.value_weight * value_score +
-            self.size_weight * size_score
-        )
+        import numpy as np
+        
+        # Coletar scores e pesos válidos (não NaN)
+        scores_and_weights = []
+        
+        if not np.isnan(momentum_score):
+            scores_and_weights.append((momentum_score, self.momentum_weight))
+        
+        if not np.isnan(quality_score):
+            scores_and_weights.append((quality_score, self.quality_weight))
+        
+        if not np.isnan(value_score):
+            scores_and_weights.append((value_score, self.value_weight))
+        
+        if size_score != 0.0 and not np.isnan(size_score):
+            scores_and_weights.append((size_score, self.size_weight))
+        
+        # Se nenhum score disponível, retorna 0
+        if not scores_and_weights:
+            logger.warning("All category scores are NaN, returning 0.0")
+            return 0.0
+        
+        # Calcular soma dos pesos válidos
+        total_weight = sum(weight for _, weight in scores_and_weights)
+        
+        # Calcular score final ponderado (renormalizando pesos)
+        final_score = sum(score * (weight / total_weight) for score, weight in scores_and_weights)
+        
+        logger.debug(f"Final score: {final_score:.3f} (from {len(scores_and_weights)} categories)")
         
         return final_score
     
