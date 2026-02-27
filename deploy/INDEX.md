@@ -25,12 +25,20 @@ Sistema com arquitetura de 3 camadas e tratamento estatístico de missing values
   - Backup e restore
   - Troubleshooting avançado
 
-### Deploy v2.5.2
-- **[../EC2_DEPLOY_V2.5.2.md](../EC2_DEPLOY_V2.5.2.md)**
-  - Mudanças específicas da v2.5.2
-  - Tratamento estatístico de missing values
-  - Verificações de scores corretos
-  - Comparação entre versões
+### Deploy v2.6.0
+- **[EC2_DEPLOY_V2.6.0.md](EC2_DEPLOY_V2.6.0.md)**
+  - Deploy completo v2.6.0 (Adaptive History)
+  - Migration de confidence factors
+  - Verificações pós-deploy
+  - Troubleshooting
+
+### Automação
+- **[CRON_SETUP.md](CRON_SETUP.md)** ⭐ NOVO
+  - Configuração de execução automática
+  - Cron jobs para pipeline diário (19:00)
+  - Suavização temporal automática (19:30)
+  - Monitoramento e logs
+  - Troubleshooting de cron
 
 ### Referência Rápida
 - **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)**
@@ -44,7 +52,7 @@ Sistema com arquitetura de 3 camadas e tratamento estatístico de missing values
 1. Ler [SETUP_NOVO_EC2.md](SETUP_NOVO_EC2.md)
 2. Seguir passo a passo
 3. Testar aplicação
-4. Configurar cron job
+4. Configurar cron jobs: [CRON_SETUP.md](CRON_SETUP.md)
 
 ### 2. Configuração Avançada
 1. Ler [EC2_DEPLOY.md](EC2_DEPLOY.md)
@@ -55,7 +63,7 @@ Sistema com arquitetura de 3 camadas e tratamento estatístico de missing values
 ### 3. Manutenção
 1. Consultar [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
 2. Executar backups regulares
-3. Monitorar logs
+3. Monitorar logs: `/var/log/pipeline.log`, `/var/log/smoothing.log`
 4. Atualizar código quando necessário
 
 ## 🛠️ Scripts Disponíveis

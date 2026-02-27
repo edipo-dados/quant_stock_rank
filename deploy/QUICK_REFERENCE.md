@@ -304,17 +304,29 @@ find /home/deploy/backups -mtime +30 -delete
 
 ### Executar
 ```bash
-# Modo liquid (63 ativos B3)
-docker compose exec backend python scripts/run_pipeline.py --mode liquid
+# Modo liquid (50 ativos mais líquidos)
+docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
 
-# Modo test (5 ativos)
-docker compose exec backend python scripts/run_pipeline.py --mode test
+# Modo test (10 ativos)
+docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode test --limit 10
 
-# Ticker específico
-docker compose exec backend python scripts/run_pipeline.py --mode manual --tickers PETR4.SA
+# Modo FULL (reprocessa histórico completo)
+docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full
 
 # Ver logs
-tail -f logs/pipeline.log
+docker logs -f quant-ranker-backend
+```
+
+### Suavização Temporal
+```bash
+# Aplicar suavização a todas as datas
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+
+# Aplicar apenas à data de hoje
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py
+
+# Com parâmetros customizados
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --alpha 0.8 --lookback-days 30
 ```
 
 ### Agendar (Cron)
@@ -322,8 +334,25 @@ tail -f logs/pipeline.log
 # Editar crontab
 crontab -e
 
-# Executar diariamente às 18h
-0 18 * * * cd /home/deploy/seu-repo && docker compose exec -T backend python scripts/run_pipeline.py --mode liquid >> /home/deploy/logs/pipeline.log 2>&1
+# Adicionar execução automática:
+# Pipeline diário às 19:00 (após fechamento do mercado)
+0 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 >> /var/log/pipeline.log 2>&1
+
+# Suavização temporal às 19:30 (30 min após pipeline)
+30 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all >> /var/log/smoothing.log 2>&1
+
+# Verificar cron jobs configurados
+crontab -l
+
+# Ver logs do cron
+tail -f /var/log/pipeline.log
+tail -f /var/log/smoothing.log
+```
+
+### Limpar e Reprocessar
+```bash
+# ATENÇÃO: Deleta todos os dados! Faça backup antes!
+docker exec -it quant-ranker-backend python scripts/clear_and_run_full.py --mode liquid --limit 50
 ```
 
 ---

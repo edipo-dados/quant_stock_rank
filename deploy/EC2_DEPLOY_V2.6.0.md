@@ -162,7 +162,42 @@ db.close()
 - `--alpha 0.8`: Mais reativo (80% atual, 20% anterior)
 - `--alpha 0.5`: Peso igual (50% atual, 50% anterior)
 
-### 11. Verificar Scores e Confidence Factors
+### 11. Configurar Cron Jobs para Execução Automática
+
+Configure o cron para executar o pipeline e suavização automaticamente:
+
+```bash
+# Editar crontab
+crontab -e
+
+# Adicionar as seguintes linhas:
+# Pipeline diário às 19:00 (após fechamento do mercado)
+0 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 >> /var/log/pipeline.log 2>&1
+
+# Suavização temporal às 19:30 (30 min após pipeline)
+30 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all >> /var/log/smoothing.log 2>&1
+```
+
+**Verificar cron jobs configurados**:
+```bash
+# Listar cron jobs
+crontab -l
+
+# Verificar logs
+tail -f /var/log/pipeline.log
+tail -f /var/log/smoothing.log
+```
+
+**Testar execução manual**:
+```bash
+# Testar pipeline
+cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
+
+# Testar suavização (aguardar pipeline terminar)
+cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+```
+
+### 12. Verificar Scores e Confidence Factors
 
 ```bash
 # Verificar que scores não são mais NaN

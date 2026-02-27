@@ -130,7 +130,10 @@ docker exec quant-ranker-backend python scripts/check_latest_scores.py
 # 7. Configurar cron job (execução diária às 19h)
 crontab -e
 # Adicionar:
+# Pipeline diário às 19:00 (após fechamento do mercado)
 0 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 >> /var/log/pipeline.log 2>&1
+# Suavização temporal às 19:30 (30 min após pipeline)
+30 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all >> /var/log/smoothing.log 2>&1
 ```
 
 ## 📁 Estrutura do Projeto

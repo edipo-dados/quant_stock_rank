@@ -90,6 +90,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-quant_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quant_password}
       POSTGRES_DB: ${POSTGRES_DB:-quant_ranker}
+      # CRITICAL: Must override default SQLite URL with PostgreSQL
       DATABASE_URL: postgresql://${POSTGRES_USER:-quant_user}:${POSTGRES_PASSWORD:-quant_password}@postgres:5432/${POSTGRES_DB:-quant_ranker}
       
       # Frontend Configuration
