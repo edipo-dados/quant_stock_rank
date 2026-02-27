@@ -25,3 +25,6 @@ psycopg2-binary==2.9.9
 
 # Date utilities (needed for Research page)
 python-dateutil==2.8.2
+
+# Data Sources (needed for BacktestEngine)
+yfinance>=0.2.54
