@@ -21,6 +21,20 @@ pip install streamlit plotly
 
 ### Uso
 
+### Integrado à Aplicação Principal ✅
+
+A aplicação de research está integrada como uma página no Streamlit principal:
+
+```bash
+# Acessar aplicação principal
+http://localhost:8501
+
+# Navegar para página "🔬 Research - Backtest"
+# Disponível no menu lateral
+```
+
+### Standalone (Opcional)
+
 #### Local
 
 ```bash
