@@ -122,6 +122,48 @@ Testa cálculo de quality score.
 python scripts/test_quality_score.py
 ```
 
+### Suavização Temporal
+
+#### `apply_temporal_smoothing.py`
+Aplica suavização exponencial aos scores para reduzir turnover do portfólio.
+
+**Fórmula**: `final_score_smoothed = 0.7 * score_atual + 0.3 * score_anterior`
+
+```bash
+# Aplicar suavização à data de hoje
+python scripts/apply_temporal_smoothing.py
+
+# Aplicar a uma data específica
+python scripts/apply_temporal_smoothing.py --date 2026-02-26
+
+# Aplicar a TODAS as datas com scores
+python scripts/apply_temporal_smoothing.py --all
+
+# Customizar alpha (peso do score atual)
+python scripts/apply_temporal_smoothing.py --alpha 0.8
+
+# Customizar lookback (dias para buscar score anterior)
+python scripts/apply_temporal_smoothing.py --lookback-days 60
+
+# Docker - Aplicar a todas as datas
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+```
+
+**Parâmetros**:
+- `--date`: Data específica (YYYY-MM-DD). Default: hoje
+- `--alpha`: Peso do score atual (0-1). Default: 0.7
+  - 0.5 = peso igual (50% atual, 50% anterior)
+  - 0.7 = padrão (70% atual, 30% anterior)
+  - 0.9 = mais reativo (90% atual, 10% anterior)
+  - 1.0 = sem suavização (100% atual)
+- `--lookback-days`: Dias para buscar score anterior. Default: 30
+- `--all`: Processar todas as datas com scores
+
+**Quando usar**:
+- Após rodar o pipeline para suavizar scores recém-calculados
+- Para reprocessamento histórico (use `--all`)
+- Para ajustar estratégia testando diferentes valores de alpha
+
 ### Manutenção
 
 #### `force_refresh_data.py`
@@ -171,10 +213,16 @@ docker exec quant-ranker-backend python scripts/init_db.py
 # 2. Executar migration (v2.6.0)
 docker exec quant-ranker-backend python scripts/migrate_add_confidence_factors.py
 
-# 3. Rodar pipeline FULL
+# 3. Executar migration (smoothing)
+docker exec quant-ranker-backend python scripts/migrate_add_backtest_smoothing.py
+
+# 4. Rodar pipeline FULL
 docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full
 
-# 4. Verificar scores
+# 5. Aplicar suavização a todo histórico
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+
+# 6. Verificar scores
 docker exec quant-ranker-backend python scripts/check_latest_scores.py
 ```
 
@@ -184,7 +232,10 @@ docker exec quant-ranker-backend python scripts/check_latest_scores.py
 # 1. Rodar pipeline incremental
 docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
 
-# 2. Verificar scores
+# 2. Aplicar suavização temporal
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py
+
+# 3. Verificar scores
 docker exec quant-ranker-backend python scripts/check_latest_scores.py
 ```
 

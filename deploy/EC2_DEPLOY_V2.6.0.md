@@ -129,7 +129,40 @@ docker exec quant-ranker-backend python scripts/check_latest_scores.py
 curl http://localhost:8501
 ```
 
-### 10. Verificar Scores e Confidence Factors
+### 10. (OPCIONAL) Aplicar Suavização Temporal
+
+A suavização temporal reduz turnover do portfólio ao suavizar mudanças bruscas nos scores:
+
+```bash
+# Aplicar suavização a todas as datas com scores
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+
+# Ou apenas à data de hoje
+docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py
+
+# Verificar scores suavizados
+docker exec quant-ranker-backend python -c "
+from app.models.database import SessionLocal
+from app.models.schemas import ScoreDaily
+from datetime import date
+
+db = SessionLocal()
+scores = db.query(ScoreDaily).filter(ScoreDaily.date == date.today()).limit(5).all()
+print('Ticker | Raw Score | Smoothed Score')
+print('-' * 40)
+for s in scores:
+    smoothed = s.final_score_smoothed if s.final_score_smoothed else s.final_score
+    print(f'{s.ticker:8} | {s.final_score:9.3f} | {smoothed:14.3f}')
+db.close()
+"
+```
+
+**Parâmetros de suavização**:
+- `--alpha 0.7`: 70% peso no score atual, 30% no anterior (padrão)
+- `--alpha 0.8`: Mais reativo (80% atual, 20% anterior)
+- `--alpha 0.5`: Peso igual (50% atual, 50% anterior)
+
+### 11. Verificar Scores e Confidence Factors
 
 ```bash
 # Verificar que scores não são mais NaN
