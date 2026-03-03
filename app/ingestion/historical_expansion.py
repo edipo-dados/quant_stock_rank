@@ -173,9 +173,9 @@ class HistoricalExpansion:
             # Ordenar por data
             df = df.sort_values('date')
             
-            # Inserir no banco (upsert) - commit por batch para evitar rollback
+            # Inserir no banco (upsert) - processar tudo e commit no final
             records_inserted = 0
-            batch_size = 100
+            records_updated = 0
             
             for idx, row in df.iterrows():
                 try:
@@ -193,6 +193,7 @@ class HistoricalExpansion:
                         existing.close = float(row['Close'])
                         existing.volume = int(row['Volume'])
                         existing.adj_close = float(row['Close'])  # yfinance já retorna ajustado
+                        records_updated += 1
                     else:
                         # Inserir novo
                         price_record = RawPriceDaily(
@@ -206,35 +207,35 @@ class HistoricalExpansion:
                             adj_close=float(row['Close'])
                         )
                         self.db.add(price_record)
-                    
-                    records_inserted += 1
-                    
-                    # Commit em batches
-                    if records_inserted % batch_size == 0:
-                        try:
-                            self.db.commit()
-                        except Exception as commit_error:
-                            logger.warning(f"Erro no commit batch para {ticker}: {commit_error}")
-                            self.db.rollback()
+                        records_inserted += 1
                     
                 except Exception as e:
                     logger.warning(f"Erro ao processar registro para {ticker} em {row['date']}: {e}")
-                    self.db.rollback()
                     continue
             
-            # Commit final
+            # Commit único no final
+            total_records = records_inserted + records_updated
+            
+            # Commit único no final
+            total_records = records_inserted + records_updated
+            
             try:
                 self.db.commit()
+                logger.info(f"✓ {ticker}: {total_records} registros ({records_inserted} novos, {records_updated} atualizados)")
             except Exception as e:
-                logger.warning(f"Erro no commit final para {ticker}: {e}")
+                logger.error(f"✗ {ticker}: Erro no commit: {e}")
                 self.db.rollback()
-            
-            logger.info(f"✓ {ticker}: {records_inserted} registros inseridos/atualizados")
+                return {
+                    "ticker": ticker,
+                    "success": False,
+                    "records_inserted": 0,
+                    "error": f"Commit error: {str(e)}"
+                }
             
             return {
                 "ticker": ticker,
                 "success": True,
-                "records_inserted": records_inserted,
+                "records_inserted": total_records,
                 "start_date": df['date'].min(),
                 "end_date": df['date'].max(),
                 "error": None
