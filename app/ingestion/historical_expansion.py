@@ -158,9 +158,11 @@ class HistoricalExpansion:
             # Ordenar por data
             df = df.sort_values('date')
             
-            # Inserir no banco (upsert)
+            # Inserir no banco (upsert) - commit por batch para evitar rollback
             records_inserted = 0
-            for _, row in df.iterrows():
+            batch_size = 100
+            
+            for idx, row in df.iterrows():
                 try:
                     # Verificar se já existe
                     existing = self.db.query(RawPriceDaily).filter(
@@ -191,11 +193,26 @@ class HistoricalExpansion:
                         self.db.add(price_record)
                     
                     records_inserted += 1
+                    
+                    # Commit em batches
+                    if records_inserted % batch_size == 0:
+                        try:
+                            self.db.commit()
+                        except Exception as commit_error:
+                            logger.warning(f"Erro no commit batch para {ticker}: {commit_error}")
+                            self.db.rollback()
+                    
                 except Exception as e:
-                    logger.warning(f"Erro ao inserir registro para {ticker} em {row['date']}: {e}")
+                    logger.warning(f"Erro ao processar registro para {ticker} em {row['date']}: {e}")
+                    self.db.rollback()
                     continue
             
-            self.db.commit()
+            # Commit final
+            try:
+                self.db.commit()
+            except Exception as e:
+                logger.warning(f"Erro no commit final para {ticker}: {e}")
+                self.db.rollback()
             
             logger.info(f"✓ {ticker}: {records_inserted} registros inseridos/atualizados")
             
@@ -324,9 +341,15 @@ class HistoricalExpansion:
                     
                 except Exception as e:
                     logger.warning(f"Erro ao processar ano {date_col} para {ticker}: {e}")
+                    self.db.rollback()
                     continue
             
-            self.db.commit()
+            # Commit final
+            try:
+                self.db.commit()
+            except Exception as e:
+                logger.warning(f"Erro no commit para {ticker}: {e}")
+                self.db.rollback()
             
             if years_available < 3:
                 logger.warning(f"⚠ {ticker}: apenas {years_available} anos disponíveis (< 3)")
