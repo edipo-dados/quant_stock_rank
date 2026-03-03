@@ -34,6 +34,7 @@ Sistema com histórico adaptativo e confidence factors:
 | [DOCKER.md](DOCKER.md) | Guia completo Docker | Usar Docker |
 | [CHAT_GEMINI.md](CHAT_GEMINI.md) | Chat com IA | Usar assistente |
 | [MCP_SERVER.md](MCP_SERVER.md) | Integração com agentes | Integrar com IA |
+| [HISTORICAL_EXPANSION.md](HISTORICAL_EXPANSION.md) | **NOVO**: Expansão histórica | Expandir dados 5 anos |
 
 ### Para Deploy e Manutenção
 
@@ -80,6 +81,9 @@ Sistema com histórico adaptativo e confidence factors:
 ### "Quero integrar com Claude/ChatGPT"
 → [MCP_SERVER.md](MCP_SERVER.md)
 
+### "Quero expandir dados históricos (5 anos)"
+→ [HISTORICAL_EXPANSION.md](HISTORICAL_EXPANSION.md)
+
 ### "Tenho problemas"
 → [ADAPTIVE_HISTORY_IMPLEMENTATION.md - Troubleshooting](../ADAPTIVE_HISTORY_IMPLEMENTATION.md#troubleshooting)
 
@@ -98,7 +102,8 @@ docs/
 ├── MELHORIAS_ACADEMICAS.md             # Roadmap
 ├── DOCKER.md                           # Guia Docker
 ├── CHAT_GEMINI.md                      # Chat com IA
-└── MCP_SERVER.md                       # Integração MCP
+├── MCP_SERVER.md                       # Integração MCP
+└── HISTORICAL_EXPANSION.md             # NOVO: Expansão histórica 5 anos
 
 deploy/
 ├── EC2_DEPLOY_V2.6.0.md                # NOVO: Deploy v2.6.0
