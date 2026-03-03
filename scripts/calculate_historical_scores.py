@@ -27,7 +27,6 @@ from app.factor_engine.fundamental_factors import FundamentalFactorCalculator
 from app.factor_engine.normalizer import CrossSectionalNormalizer
 from app.factor_engine.missing_handler import MissingValueHandler
 from app.scoring.scoring_engine import ScoringEngine
-from app.scoring.ranker import Ranker
 from app.filters.eligibility_filter import EligibilityFilter
 import logging
 
@@ -306,22 +305,20 @@ def calculate_scores_for_date(target_date: date, db: Session) -> Dict:
             logger.warning(f"  Nenhum score calculado")
             return {"date": target_date, "scores": 0, "skipped": False}
         
-        # 9. Ranking
-        ranker = Ranker()
-        scores_df = pd.DataFrame(scores)
-        ranked_df = ranker.rank_assets(scores_df)
+        # 9. Ranking - ordenar por final_score
+        scores_sorted = sorted(scores, key=lambda x: x['final_score'], reverse=True)
         
         # 10. Salvar scores
-        for _, row in ranked_df.iterrows():
+        for rank, score_data in enumerate(scores_sorted, start=1):
             score_record = ScoreDaily(
-                ticker=row['ticker'],
+                ticker=score_data['ticker'],
                 date=target_date,
-                final_score=row['final_score'],
-                momentum_score=row['momentum_score'],
-                quality_score=row['quality_score'],
-                value_score=row['value_score'],
-                confidence=row['confidence'],
-                rank=row['rank']
+                final_score=score_data['final_score'],
+                momentum_score=score_data['momentum_score'],
+                quality_score=score_data['quality_score'],
+                value_score=score_data['value_score'],
+                confidence=score_data['confidence'],
+                rank=rank
             )
             db.add(score_record)
         
