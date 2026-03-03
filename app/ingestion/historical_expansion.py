@@ -173,32 +173,39 @@ class HistoricalExpansion:
             # Ordenar por data
             df = df.sort_values('date')
             
-            # Inserir no banco (upsert) - processar tudo e commit no final
-            records_inserted = 0
-            records_updated = 0
+            # Inserir no banco usando bulk operations (mais eficiente e seguro)
+            records_to_insert = []
+            records_to_update = []
             
+            # Buscar todos os registros existentes de uma vez
+            existing_dates = {}
+            existing_records = self.db.query(RawPriceDaily).filter(
+                RawPriceDaily.ticker == ticker
+            ).all()
+            
+            for record in existing_records:
+                existing_dates[record.date] = record
+            
+            # Processar DataFrame
             for idx, row in df.iterrows():
                 try:
-                    # Verificar se já existe
-                    existing = self.db.query(RawPriceDaily).filter(
-                        RawPriceDaily.ticker == ticker,
-                        RawPriceDaily.date == row['date']
-                    ).first()
+                    row_date = row['date']
                     
-                    if existing:
-                        # Atualizar
+                    if row_date in existing_dates:
+                        # Atualizar registro existente
+                        existing = existing_dates[row_date]
                         existing.open = float(row['Open'])
                         existing.high = float(row['High'])
                         existing.low = float(row['Low'])
                         existing.close = float(row['Close'])
                         existing.volume = int(row['Volume'])
-                        existing.adj_close = float(row['Close'])  # yfinance já retorna ajustado
-                        records_updated += 1
+                        existing.adj_close = float(row['Close'])
+                        records_to_update.append(existing)
                     else:
-                        # Inserir novo
+                        # Preparar novo registro
                         price_record = RawPriceDaily(
                             ticker=ticker,
-                            date=row['date'],
+                            date=row_date,
                             open=float(row['Open']),
                             high=float(row['High']),
                             low=float(row['Low']),
@@ -206,22 +213,28 @@ class HistoricalExpansion:
                             volume=int(row['Volume']),
                             adj_close=float(row['Close'])
                         )
-                        self.db.add(price_record)
-                        records_inserted += 1
+                        records_to_insert.append(price_record)
                     
                 except Exception as e:
-                    logger.warning(f"Erro ao processar registro para {ticker} em {row['date']}: {e}")
+                    logger.warning(f"Erro ao processar registro para {ticker} em {row_date}: {e}")
                     continue
             
+            # Inserir novos registros em bulk
+            if records_to_insert:
+                self.db.bulk_save_objects(records_to_insert)
+            
+            # Commit único no final
+            total_records = len(records_to_insert) + len(records_to_update)
+            
             # Commit único no final
             total_records = records_inserted + records_updated
             
             # Commit único no final
-            total_records = records_inserted + records_updated
+            total_records = len(records_to_insert) + len(records_to_update)
             
             try:
                 self.db.commit()
-                logger.info(f"✓ {ticker}: {total_records} registros ({records_inserted} novos, {records_updated} atualizados)")
+                logger.info(f"✓ {ticker}: {total_records} registros ({len(records_to_insert)} novos, {len(records_to_update)} atualizados)")
             except Exception as e:
                 logger.error(f"✗ {ticker}: Erro no commit: {e}")
                 self.db.rollback()
