@@ -53,12 +53,21 @@ class DataValidator:
         warnings = []
         
         try:
-            # Buscar todos os preços
-            prices = self.db.query(RawPriceDaily).filter(
-                RawPriceDaily.ticker == ticker
-            ).order_by(RawPriceDaily.date).all()
+            # Buscar todos os preços - usar apenas colunas necessárias
+            from sqlalchemy import select
             
-            if not prices:
+            stmt = select(
+                RawPriceDaily.date,
+                RawPriceDaily.close,
+                RawPriceDaily.adj_close,
+                RawPriceDaily.volume
+            ).where(
+                RawPriceDaily.ticker == ticker
+            ).order_by(RawPriceDaily.date)
+            
+            result = self.db.execute(stmt).fetchall()
+            
+            if not result:
                 return {
                     "ticker": ticker,
                     "valid": False,
@@ -68,12 +77,7 @@ class DataValidator:
                 }
             
             # Converter para DataFrame
-            df = pd.DataFrame([{
-                'date': p.date,
-                'close': p.close,
-                'adj_close': p.adj_close,
-                'volume': p.volume
-            } for p in prices])
+            df = pd.DataFrame(result, columns=['date', 'close', 'adj_close', 'volume'])
             
             df['date'] = pd.to_datetime(df['date'])
             df = df.sort_values('date')
@@ -184,13 +188,24 @@ class DataValidator:
         warnings = []
         
         try:
-            # Buscar fundamentos
-            fundamentals = self.db.query(RawFundamental).filter(
+            # Buscar fundamentos - usar apenas colunas necessárias
+            from sqlalchemy import select
+            
+            stmt = select(
+                RawFundamental.period_end_date,
+                RawFundamental.revenue,
+                RawFundamental.net_income,
+                RawFundamental.ebitda,
+                RawFundamental.shareholders_equity,
+                RawFundamental.total_debt
+            ).where(
                 RawFundamental.ticker == ticker,
                 RawFundamental.period_type == 'annual'
-            ).order_by(RawFundamental.period_end_date).all()
+            ).order_by(RawFundamental.period_end_date)
             
-            if not fundamentals:
+            result = self.db.execute(stmt).fetchall()
+            
+            if not result:
                 return {
                     "ticker": ticker,
                     "valid": False,
@@ -199,21 +214,17 @@ class DataValidator:
                     "stats": {}
                 }
             
-            years_available = len(fundamentals)
+            years_available = len(result)
             
             # 1. Verificar mínimo 3 anos
             if years_available < 3:
                 issues.append(f"Insufficient years: {years_available} < 3")
             
             # Converter para DataFrame para análise
-            df = pd.DataFrame([{
-                'period_end_date': f.period_end_date,
-                'revenue': f.revenue,
-                'net_income': f.net_income,
-                'ebitda': f.ebitda,
-                'shareholders_equity': f.shareholders_equity,
-                'total_debt': f.total_debt
-            } for f in fundamentals])
+            df = pd.DataFrame(
+                result,
+                columns=['period_end_date', 'revenue', 'net_income', 'ebitda', 'shareholders_equity', 'total_debt']
+            )
             
             df = df.sort_values('period_end_date')
             
