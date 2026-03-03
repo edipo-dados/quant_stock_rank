@@ -132,8 +132,13 @@ class HistoricalExpansion:
             end_date = date.today().strftime('%Y-%m-%d')
             
             # Buscar dados do yfinance
+            logger.debug(f"Criando objeto Ticker para {ticker}")
             ticker_obj = yf.Ticker(ticker)
+            
+            logger.debug(f"Buscando histórico de {start_date} até {end_date}")
             df = ticker_obj.history(start=start_date, end=end_date)
+            
+            logger.debug(f"Dados recebidos: {len(df) if not df.empty else 0} registros")
             
             if df.empty:
                 logger.warning(f"Sem dados para {ticker}")
@@ -146,7 +151,17 @@ class HistoricalExpansion:
             
             # Processar dados
             df = df.reset_index()
-            df['date'] = pd.to_datetime(df['Date']).dt.date
+            
+            # Verificar nome da coluna de data
+            if 'Date' in df.columns:
+                df['date'] = pd.to_datetime(df['Date']).dt.date
+            elif 'index' in df.columns:
+                df['date'] = pd.to_datetime(df['index']).dt.date
+            else:
+                # Tentar usar o índice diretamente
+                df['date'] = pd.to_datetime(df.index).date
+            
+            logger.debug(f"Colunas disponíveis: {df.columns.tolist()}")
             
             # Remover datas futuras
             today = date.today()
@@ -225,8 +240,17 @@ class HistoricalExpansion:
                 "error": None
             }
             
+        except DataFetchError as e:
+            logger.error(f"✗ {ticker}: {str(e)}")
+            return {
+                "ticker": ticker,
+                "success": False,
+                "records_inserted": 0,
+                "error": str(e)
+            }
         except Exception as e:
             logger.error(f"✗ {ticker}: {str(e)}")
+            logger.debug(f"Traceback:", exc_info=True)
             return {
                 "ticker": ticker,
                 "success": False,
