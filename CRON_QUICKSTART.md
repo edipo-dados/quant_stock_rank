@@ -16,15 +16,24 @@ Cole estas linhas no final do arquivo:
 
 ```bash
 # ============================================================================
-# Quant Stock Ranker - Execução Automática Diária
+# Quant Stock Ranker - Execução Automática Diária (INTELIGENTE)
 # ============================================================================
 
-# Pipeline incremental diário às 19:00 (após fechamento do mercado)
-# Atualiza preços, fundamentos, calcula features e scores
+# Pipeline inteligente diário às 19:00 (após fechamento do mercado)
+# Decide automaticamente entre FULL e INCREMENTAL
+# Inclui suavização temporal automaticamente
+0 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/run_smart_pipeline.py --limit 50 >> ~/pipeline.log 2>&1
+```
+
+**Alternativa (Pipeline Manual):**
+
+Se preferir controlar manualmente FULL vs INCREMENTAL:
+
+```bash
+# Pipeline incremental diário às 19:00
 0 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 >> ~/pipeline.log 2>&1
 
 # Suavização temporal às 19:30 (30 min após pipeline)
-# Aplica smoothing exponencial para reduzir turnover
 30 19 * * * cd ~/quant_stock_rank && docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all >> ~/smoothing.log 2>&1
 ```
 
@@ -44,18 +53,36 @@ crontab -l
 
 ## O Que Vai Acontecer
 
-**Todos os dias às 19:00:**
-1. Pipeline incremental executa
-2. Atualiza preços do dia
-3. Atualiza fundamentos (se disponíveis)
-4. Calcula features (momentum, fundamentais)
-5. Calcula scores
-6. Gera ranking
+**Todos os dias às 19:00 (Pipeline Inteligente):**
 
-**Todos os dias às 19:30:**
-1. Suavização temporal executa
-2. Aplica smoothing nos scores (0.7 × atual + 0.3 × anterior)
-3. Reduz turnover do portfólio
+O pipeline analisa o banco de dados e decide automaticamente:
+
+**FULL** (se necessário):
+- Limpa dados antigos
+- Ingere histórico completo de preços
+- Ingere fundamentos
+- Calcula todas as features
+- Calcula todos os scores
+- Aplica suavização temporal
+
+**INCREMENTAL** (se dados estão atualizados):
+- Atualiza apenas preços do dia
+- Atualiza fundamentos novos
+- Calcula features incrementais
+- Calcula scores do dia
+- Aplica suavização temporal
+
+**Critérios para FULL:**
+- Banco de dados vazio
+- Primeira execução
+- Última execução há mais de 7 dias
+- Últimos preços há mais de 7 dias
+- Menos de 50 tickers no banco
+
+**Critérios para INCREMENTAL:**
+- Dados atualizados (última execução <7 dias)
+- Preços recentes (<7 dias)
+- Mais de 50 tickers disponíveis
 
 ## Verificar Logs
 
@@ -73,12 +100,18 @@ tail -f ~/pipeline.log
 ## Testar Manualmente (Antes do Cron)
 
 ```bash
-# Testar pipeline
+# Testar pipeline inteligente (recomendado)
 cd ~/quant_stock_rank
-docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
+docker exec quant-ranker-backend python scripts/run_smart_pipeline.py --limit 50
 
-# Testar suavização
-docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+# Ver análise sem executar (dry-run)
+docker exec quant-ranker-backend python scripts/run_smart_pipeline.py --dry-run
+
+# Forçar FULL
+docker exec quant-ranker-backend python scripts/run_smart_pipeline.py --force-full --limit 50
+
+# Forçar INCREMENTAL
+docker exec quant-ranker-backend python scripts/run_smart_pipeline.py --force-incremental --limit 50
 
 # Verificar scores
 docker exec quant-ranker-backend python scripts/check_latest_scores.py
