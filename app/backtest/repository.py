@@ -147,7 +147,10 @@ class BacktestRepository:
         nav_records: List[Dict]
     ) -> int:
         """
-        Salva registros de NAV em batch.
+        Salva registros de NAV em batch com upsert.
+        
+        Remove registros existentes para o run_id antes de inserir novos.
+        Isso evita erro de duplicate key.
         
         Args:
             run_id: ID da execução
@@ -156,6 +159,12 @@ class BacktestRepository:
         Returns:
             Número de registros salvos
         """
+        # Deletar registros existentes para este run_id
+        self.db.query(BacktestNAV).filter(
+            BacktestNAV.run_id == run_id
+        ).delete()
+        
+        # Inserir novos registros
         records = []
         for record in nav_records:
             nav = BacktestNAV(
@@ -209,7 +218,10 @@ class BacktestRepository:
         positions: List[Dict]
     ) -> int:
         """
-        Salva posições em batch.
+        Salva posições em batch com upsert.
+        
+        Remove posições existentes para o run_id antes de inserir novas.
+        Isso evita erro de duplicate key.
         
         Args:
             run_id: ID da execução
@@ -218,6 +230,12 @@ class BacktestRepository:
         Returns:
             Número de posições salvas
         """
+        # Deletar posições existentes para este run_id
+        self.db.query(BacktestPosition).filter(
+            BacktestPosition.run_id == run_id
+        ).delete()
+        
+        # Inserir novas posições
         records = []
         for pos in positions:
             position = BacktestPosition(
