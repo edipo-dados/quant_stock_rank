@@ -249,6 +249,11 @@ class PerformanceMetrics:
         metrics['sortino_ratio'] = PerformanceMetrics.calculate_sortino_ratio(returns, risk_free_rate, periods_per_year)
         metrics['calmar_ratio'] = PerformanceMetrics.calculate_calmar_ratio(returns, periods_per_year)
         
+        # Validar métricas
+        warnings = PerformanceMetrics.validate_metrics(metrics)
+        if warnings:
+            metrics['validation_warnings'] = warnings
+        
         return metrics
 
 
@@ -260,7 +265,7 @@ class PerformanceMetrics:
         periods_per_year: int = 12
     ) -> tuple[float, float]:
         """
-        Calcula Alpha e Beta usando CAPM.
+        Calcula Alpha e Beta usando CAPM com validações robustas.
         
         CAPM (Capital Asset Pricing Model):
         Beta = Cov(Rs, Rb) / Var(Rb)
@@ -283,25 +288,70 @@ class PerformanceMetrics:
             - alpha em % anualizado
             - beta como float
         """
-        # Alinhar séries (garantir mesmo tamanho)
-        min_len = min(len(strategy_returns), len(benchmark_returns))
-        strategy = strategy_returns.iloc[:min_len]
-        benchmark = benchmark_returns.iloc[:min_len]
+        # Validação de entrada
+        if len(strategy_returns) == 0 or len(benchmark_returns) == 0:
+            logger.warning("Empty returns series for alpha/beta calculation")
+            return 0.0, 1.0
         
-        # Calcular Beta
+        # Alinhar séries pelo índice (garantir mesmas datas)
+        aligned = pd.DataFrame({
+            'strategy': strategy_returns,
+            'benchmark': benchmark_returns
+        }).dropna()
+        
+        if len(aligned) < 2:
+            logger.warning(f"Insufficient aligned data points for alpha/beta: {len(aligned)}")
+            return 0.0, 1.0
+        
+        strategy = aligned['strategy']
+        benchmark = aligned['benchmark']
+        
+        logger.info(f"Calculating alpha/beta with {len(strategy)} aligned periods")
+        
+        # Calcular Beta usando covariância
         covariance = strategy.cov(benchmark)
         benchmark_variance = benchmark.var()
-        beta = covariance / benchmark_variance if benchmark_variance != 0 else 0.0
         
-        # Calcular retornos médios anualizados
-        strategy_mean_annual = strategy.mean() * periods_per_year
-        benchmark_mean_annual = benchmark.mean() * periods_per_year
+        if benchmark_variance == 0:
+            logger.warning("Benchmark variance is zero, setting beta=1.0")
+            beta = 1.0
+        else:
+            beta = covariance / benchmark_variance
         
-        # Calcular Alpha anualizado usando CAPM
+        # Validar Beta (deve estar entre -2 e 3 tipicamente)
+        if abs(beta) > 5:
+            logger.warning(f"Beta value seems unrealistic: {beta:.2f}")
+        
+        # Calcular retornos médios periódicos
+        strategy_mean = strategy.mean()
+        benchmark_mean = benchmark.mean()
+        
+        # Converter risk_free_rate anualizada para periódica
+        rf_periodic = risk_free_rate / periods_per_year
+        
+        # Calcular Alpha periódico usando CAPM
         # Alpha = Rs - (Rf + Beta * (Rb - Rf))
-        alpha = strategy_mean_annual - (risk_free_rate + beta * (benchmark_mean_annual - risk_free_rate))
+        alpha_periodic = strategy_mean - (rf_periodic + beta * (benchmark_mean - rf_periodic))
         
-        return alpha * 100, beta  # Alpha em %
+        # Anualizar Alpha
+        alpha_annual = alpha_periodic * periods_per_year
+        
+        # Validar Alpha (deve estar entre -50% e +50% tipicamente)
+        if abs(alpha_annual) > 0.5:
+            logger.warning(
+                f"Alpha value seems unrealistic: {alpha_annual*100:.2f}%. "
+                f"Strategy mean: {strategy_mean*100:.4f}%, "
+                f"Benchmark mean: {benchmark_mean*100:.4f}%, "
+                f"Beta: {beta:.2f}"
+            )
+        
+        logger.info(
+            f"Alpha/Beta calculated: Alpha={alpha_annual*100:.2f}%, Beta={beta:.2f} "
+            f"(Strategy mean={strategy_mean*periods_per_year*100:.2f}%, "
+            f"Benchmark mean={benchmark_mean*periods_per_year*100:.2f}%)"
+        )
+        
+        return alpha_annual * 100, beta  # Alpha em %
     
     @staticmethod
     def calculate_information_ratio_v2(
@@ -310,7 +360,7 @@ class PerformanceMetrics:
         periods_per_year: int = 12
     ) -> float:
         """
-        Calcula Information Ratio (versão corrigida).
+        Calcula Information Ratio com validações robustas.
         
         IR = E[Rs - Rb] / σ[Rs - Rb]
         
@@ -325,10 +375,23 @@ class PerformanceMetrics:
         Returns:
             Information Ratio anualizado
         """
-        # Alinhar séries
-        min_len = min(len(strategy_returns), len(benchmark_returns))
-        strategy = strategy_returns.iloc[:min_len]
-        benchmark = benchmark_returns.iloc[:min_len]
+        # Validação de entrada
+        if len(strategy_returns) == 0 or len(benchmark_returns) == 0:
+            logger.warning("Empty returns series for IR calculation")
+            return 0.0
+        
+        # Alinhar séries pelo índice
+        aligned = pd.DataFrame({
+            'strategy': strategy_returns,
+            'benchmark': benchmark_returns
+        }).dropna()
+        
+        if len(aligned) < 2:
+            logger.warning(f"Insufficient aligned data points for IR: {len(aligned)}")
+            return 0.0
+        
+        strategy = aligned['strategy']
+        benchmark = aligned['benchmark']
         
         # Calcular excess returns
         excess_returns = strategy - benchmark
@@ -338,10 +401,25 @@ class PerformanceMetrics:
         std_excess = excess_returns.std()
         
         if std_excess == 0:
+            logger.warning("Tracking error is zero, cannot calculate IR")
             return 0.0
         
         # Anualizar
         ir = (mean_excess / std_excess) * np.sqrt(periods_per_year)
+        
+        # Validar IR (deve estar entre -2 e 2 tipicamente)
+        if abs(ir) > 3:
+            logger.warning(
+                f"IR value seems unrealistic: {ir:.2f}. "
+                f"Mean excess: {mean_excess*100:.4f}%, "
+                f"Tracking error: {std_excess*100:.4f}%"
+            )
+        
+        logger.info(
+            f"Information Ratio calculated: {ir:.2f} "
+            f"(Mean excess={mean_excess*periods_per_year*100:.2f}%, "
+            f"Tracking error={std_excess*np.sqrt(periods_per_year)*100:.2f}%)"
+        )
         
         return ir
     
@@ -412,3 +490,64 @@ class PerformanceMetrics:
         calmar = (cagr / 100) / abs(max_dd / 100)
         
         return calmar
+    
+    @staticmethod
+    def validate_metrics(metrics: Dict[str, float]) -> Dict[str, str]:
+        """
+        Valida métricas calculadas e retorna warnings para valores anômalos.
+        
+        Args:
+            metrics: Dicionário com métricas calculadas
+            
+        Returns:
+            Dicionário com warnings {metric_name: warning_message}
+        """
+        warnings = {}
+        
+        # Validar Alpha (-20% a +20% é razoável)
+        if metrics.get('alpha') is not None:
+            alpha = metrics['alpha']
+            if abs(alpha) > 20:
+                warnings['alpha'] = f"Alpha anual muito alto: {alpha:.2f}%. Valores típicos: -20% a +20%"
+            elif abs(alpha) > 50:
+                warnings['alpha'] = f"CRÍTICO: Alpha anual irrealista: {alpha:.2f}%. Revisar cálculo!"
+        
+        # Validar Beta (0.5 a 1.5 é típico para ações)
+        if metrics.get('beta') is not None:
+            beta = metrics['beta']
+            if abs(beta) > 3:
+                warnings['beta'] = f"Beta muito alto: {beta:.2f}. Valores típicos: 0.5 a 1.5"
+        
+        # Validar Information Ratio (-1 a 1 é típico)
+        if metrics.get('information_ratio') is not None:
+            ir = metrics['information_ratio']
+            if abs(ir) > 2:
+                warnings['information_ratio'] = f"IR muito alto: {ir:.2f}. Valores típicos: -1 a 1"
+        
+        # Validar Sharpe Ratio (-1 a 3 é razoável)
+        if metrics.get('sharpe_ratio') is not None:
+            sharpe = metrics['sharpe_ratio']
+            if abs(sharpe) > 5:
+                warnings['sharpe_ratio'] = f"Sharpe muito alto: {sharpe:.2f}. Valores típicos: -1 a 3"
+        
+        # Validar Volatilidade (5% a 50% é típico para ações)
+        if metrics.get('volatility') is not None:
+            vol = metrics['volatility']
+            if vol > 100:
+                warnings['volatility'] = f"Volatilidade muito alta: {vol:.2f}%. Valores típicos: 5% a 50%"
+        
+        # Validar Max Drawdown (-80% a 0% é razoável)
+        if metrics.get('max_drawdown') is not None:
+            dd = metrics['max_drawdown']
+            if dd < -80:
+                warnings['max_drawdown'] = f"Drawdown muito alto: {dd:.2f}%. Revisar estratégia!"
+        
+        # Log warnings
+        if warnings:
+            logger.warning("Métricas anômalas detectadas:")
+            for metric, warning in warnings.items():
+                logger.warning(f"  {metric}: {warning}")
+        else:
+            logger.info("Todas as métricas estão dentro de faixas razoáveis")
+        
+        return warnings
