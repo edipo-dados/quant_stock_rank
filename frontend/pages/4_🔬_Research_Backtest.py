@@ -438,6 +438,52 @@ def main():
         st.markdown("---")
         
         run_button = st.button("🚀 Rodar Backtest", type="primary")
+        
+        # Seção de Gerenciamento
+        st.markdown("---")
+        st.subheader("🗑️ Gerenciamento")
+        
+        with st.expander("Limpar Backtests"):
+            st.caption("Remove backtests antigos ou com erro")
+            
+            # Listar backtests existentes
+            db = SessionLocal()
+            try:
+                from app.backtest.models import BacktestRun
+                runs = db.query(BacktestRun).order_by(BacktestRun.created_at.desc()).limit(10).all()
+                
+                if runs:
+                    st.write(f"**{len(runs)} backtest(s) recente(s):**")
+                    
+                    for run in runs:
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            name_display = run.name or f"Run {run.id[:8]}"
+                            st.text(f"• {name_display}")
+                            st.caption(f"  {run.start_date} a {run.end_date}")
+                        with col2:
+                            if st.button("🗑️", key=f"del_{run.id}", help="Deletar"):
+                                try:
+                                    db.delete(run)
+                                    db.commit()
+                                    st.success("✓ Deletado")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro: {e}")
+                    
+                    st.markdown("---")
+                    if st.button("🗑️ Limpar Todos", type="secondary"):
+                        try:
+                            db.query(BacktestRun).delete()
+                            db.commit()
+                            st.success("✓ Todos os backtests foram removidos")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+                else:
+                    st.info("Nenhum backtest encontrado")
+            finally:
+                db.close()
     
     # Validar inputs
     is_valid, error_msg = validate_inputs(start_date, end_date)
