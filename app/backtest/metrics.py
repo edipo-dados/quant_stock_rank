@@ -210,32 +210,30 @@ class PerformanceMetrics:
         
         # Calcular métricas vs benchmark (se disponível)
         if benchmark_returns is not None and len(benchmark_returns) > 0:
-            # Garantir que ambas as séries têm o mesmo tamanho
-            min_len = min(len(returns), len(benchmark_returns))
-            returns_aligned = returns.iloc[:min_len]
-            benchmark_aligned = benchmark_returns.iloc[:min_len]
+            # Usar novos métodos corrigidos
+            alpha, beta = PerformanceMetrics.calculate_alpha_beta(
+                returns,
+                benchmark_returns,
+                risk_free_rate,
+                periods_per_year
+            )
             
-            # Beta
-            covariance = returns_aligned.cov(benchmark_aligned)
-            benchmark_variance = benchmark_aligned.var()
-            metrics['beta'] = covariance / benchmark_variance if benchmark_variance != 0 else 0.0
+            metrics['alpha'] = alpha  # Já em %
+            metrics['beta'] = beta
             
-            # Alpha (anualizado)
-            portfolio_return_annual = returns_aligned.mean() * periods_per_year
-            benchmark_return_annual = benchmark_aligned.mean() * periods_per_year
-            metrics['alpha'] = (portfolio_return_annual - (risk_free_rate + metrics['beta'] * (benchmark_return_annual - risk_free_rate))) * 100
-            
-            # Information Ratio
-            excess_returns = returns_aligned - benchmark_aligned
-            tracking_error = excess_returns.std() * np.sqrt(periods_per_year)
-            metrics['information_ratio'] = (excess_returns.mean() * periods_per_year) / tracking_error if tracking_error != 0 else 0.0
+            # Information Ratio corrigido
+            metrics['information_ratio'] = PerformanceMetrics.calculate_information_ratio_v2(
+                returns,
+                benchmark_returns,
+                periods_per_year
+            )
             
             # Métricas do benchmark
-            benchmark_cumulative = (1 + benchmark_aligned).cumprod()
+            benchmark_cumulative = (1 + benchmark_returns).cumprod()
             metrics['benchmark_total_return'] = (benchmark_cumulative.iloc[-1] - 1) * 100 if len(benchmark_cumulative) > 0 else 0.0
-            metrics['benchmark_cagr'] = PerformanceMetrics.calculate_cagr(benchmark_aligned, periods_per_year)
-            metrics['benchmark_volatility'] = PerformanceMetrics.calculate_volatility(benchmark_aligned, periods_per_year)
-            metrics['benchmark_sharpe'] = PerformanceMetrics.calculate_sharpe_ratio(benchmark_aligned, risk_free_rate, periods_per_year)
+            metrics['benchmark_cagr'] = PerformanceMetrics.calculate_cagr(benchmark_returns, periods_per_year)
+            metrics['benchmark_volatility'] = PerformanceMetrics.calculate_volatility(benchmark_returns, periods_per_year)
+            metrics['benchmark_sharpe'] = PerformanceMetrics.calculate_sharpe_ratio(benchmark_returns, risk_free_rate, periods_per_year)
             metrics['benchmark_max_drawdown'] = PerformanceMetrics.calculate_max_drawdown(benchmark_cumulative)
         else:
             metrics['alpha'] = None
@@ -247,4 +245,170 @@ class PerformanceMetrics:
             metrics['benchmark_sharpe'] = None
             metrics['benchmark_max_drawdown'] = None
         
+        # Adicionar Sortino e Calmar
+        metrics['sortino_ratio'] = PerformanceMetrics.calculate_sortino_ratio(returns, risk_free_rate, periods_per_year)
+        metrics['calmar_ratio'] = PerformanceMetrics.calculate_calmar_ratio(returns, periods_per_year)
+        
         return metrics
+
+
+    @staticmethod
+    def calculate_alpha_beta(
+        strategy_returns: pd.Series,
+        benchmark_returns: pd.Series,
+        risk_free_rate: float = 0.0,
+        periods_per_year: int = 12
+    ) -> tuple[float, float]:
+        """
+        Calcula Alpha e Beta usando CAPM.
+        
+        CAPM (Capital Asset Pricing Model):
+        Beta = Cov(Rs, Rb) / Var(Rb)
+        Alpha = E[Rs] - (Rf + Beta * (E[Rb] - Rf))
+        
+        Onde:
+        - Rs = retornos da estratégia
+        - Rb = retornos do benchmark
+        - Rf = taxa livre de risco
+        - E[] = valor esperado (média)
+        
+        Args:
+            strategy_returns: Série de retornos periódicos da estratégia
+            benchmark_returns: Série de retornos periódicos do benchmark
+            risk_free_rate: Taxa livre de risco anualizada (ex: 0.05 para 5%)
+            periods_per_year: Número de períodos por ano (12 para mensal)
+        
+        Returns:
+            Tuple de (alpha_anualizado_pct, beta)
+            - alpha em % anualizado
+            - beta como float
+        """
+        # Alinhar séries (garantir mesmo tamanho)
+        min_len = min(len(strategy_returns), len(benchmark_returns))
+        strategy = strategy_returns.iloc[:min_len]
+        benchmark = benchmark_returns.iloc[:min_len]
+        
+        # Calcular Beta
+        covariance = strategy.cov(benchmark)
+        benchmark_variance = benchmark.var()
+        beta = covariance / benchmark_variance if benchmark_variance != 0 else 0.0
+        
+        # Calcular retornos médios anualizados
+        strategy_mean_annual = strategy.mean() * periods_per_year
+        benchmark_mean_annual = benchmark.mean() * periods_per_year
+        
+        # Calcular Alpha anualizado usando CAPM
+        # Alpha = Rs - (Rf + Beta * (Rb - Rf))
+        alpha = strategy_mean_annual - (risk_free_rate + beta * (benchmark_mean_annual - risk_free_rate))
+        
+        return alpha * 100, beta  # Alpha em %
+    
+    @staticmethod
+    def calculate_information_ratio_v2(
+        strategy_returns: pd.Series,
+        benchmark_returns: pd.Series,
+        periods_per_year: int = 12
+    ) -> float:
+        """
+        Calcula Information Ratio (versão corrigida).
+        
+        IR = E[Rs - Rb] / σ[Rs - Rb]
+        
+        Anualizado:
+        IR = (mean(excess_returns) / std(excess_returns)) * sqrt(periods_per_year)
+        
+        Args:
+            strategy_returns: Série de retornos periódicos da estratégia
+            benchmark_returns: Série de retornos periódicos do benchmark
+            periods_per_year: Número de períodos por ano
+        
+        Returns:
+            Information Ratio anualizado
+        """
+        # Alinhar séries
+        min_len = min(len(strategy_returns), len(benchmark_returns))
+        strategy = strategy_returns.iloc[:min_len]
+        benchmark = benchmark_returns.iloc[:min_len]
+        
+        # Calcular excess returns
+        excess_returns = strategy - benchmark
+        
+        # Calcular IR
+        mean_excess = excess_returns.mean()
+        std_excess = excess_returns.std()
+        
+        if std_excess == 0:
+            return 0.0
+        
+        # Anualizar
+        ir = (mean_excess / std_excess) * np.sqrt(periods_per_year)
+        
+        return ir
+    
+    @staticmethod
+    def calculate_sortino_ratio(
+        returns: pd.Series,
+        risk_free_rate: float = 0.0,
+        periods_per_year: int = 12
+    ) -> float:
+        """
+        Calcula Sortino Ratio (penaliza apenas downside).
+        
+        Sortino = (E[R] - Rf) / σ_downside
+        
+        Onde σ_downside = std(retornos negativos) anualizado
+        
+        Args:
+            returns: Série de retornos periódicos
+            risk_free_rate: Taxa livre de risco anualizada
+            periods_per_year: Número de períodos por ano
+        
+        Returns:
+            Sortino Ratio
+        """
+        mean_return = returns.mean() * periods_per_year
+        
+        # Calcular downside deviation (apenas retornos negativos)
+        downside_returns = returns[returns < 0]
+        
+        if len(downside_returns) == 0:
+            return np.inf  # Sem downside
+        
+        downside_std = downside_returns.std() * np.sqrt(periods_per_year)
+        
+        if downside_std == 0:
+            return 0.0
+        
+        sortino = (mean_return - risk_free_rate) / downside_std
+        
+        return sortino
+    
+    @staticmethod
+    def calculate_calmar_ratio(
+        returns: pd.Series,
+        periods_per_year: int = 12
+    ) -> float:
+        """
+        Calcula Calmar Ratio.
+        
+        Calmar = CAGR / |Max Drawdown|
+        
+        Args:
+            returns: Série de retornos periódicos
+            periods_per_year: Número de períodos por ano
+        
+        Returns:
+            Calmar Ratio
+        """
+        cagr = PerformanceMetrics.calculate_cagr(returns, periods_per_year)
+        
+        cumulative_returns = (1 + returns).cumprod()
+        max_dd = PerformanceMetrics.calculate_max_drawdown(cumulative_returns)
+        
+        if max_dd == 0:
+            return np.inf
+        
+        # CAGR e max_dd já estão em %
+        calmar = (cagr / 100) / abs(max_dd / 100)
+        
+        return calmar

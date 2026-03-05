@@ -171,7 +171,8 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
                 'cagr': metrics_data['cagr'] / 100.0,
                 'volatility': metrics_data['volatility'] / 100.0,
                 'sharpe_ratio': metrics_data['sharpe_ratio'],
-                'sortino_ratio': 0.0,  # Não calculado ainda
+                'sortino_ratio': metrics_data.get('sortino_ratio', 0.0),
+                'calmar_ratio': metrics_data.get('calmar_ratio', 0.0),
                 'max_drawdown': metrics_data['max_drawdown'] / 100.0,
                 'turnover_avg': metrics_data['avg_turnover'] / 100.0,
                 'alpha': metrics_data.get('alpha'),
@@ -229,10 +230,9 @@ def display_metrics(metrics):
     with col2:
         st.metric("Sortino Ratio", f"{metrics.sortino_ratio:.2f}")
     with col3:
-        st.metric("Turnover Médio", f"{metrics.turnover_avg:.2%}")
+        st.metric("Calmar Ratio", f"{metrics.calmar_ratio:.2f}")
     with col4:
-        if metrics.alpha is not None:
-            st.metric("Alpha", f"{metrics.alpha:.2%}")
+        st.metric("Turnover Médio", f"{metrics.turnover_avg:.2%}")
     
     # Terceira linha: Métricas vs Benchmark (se disponível)
     if metrics.beta is not None or metrics.information_ratio is not None:
