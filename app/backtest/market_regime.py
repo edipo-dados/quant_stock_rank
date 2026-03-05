@@ -65,29 +65,33 @@ class MarketRegimeFilter:
         # Buscar dados do benchmark
         # Adicionar período extra para calcular MA
         from datetime import timedelta
+        from app.backtest.benchmark import BenchmarkPrice
+        
         extended_start = start_date - timedelta(days=self.ma_period * 2)
         
-        benchmark_data = self.benchmark_manager.get_benchmark_data(
-            start_date=extended_start,
-            end_date=end_date
-        )
+        # Buscar preços do benchmark diretamente
+        benchmark_prices = self.db.query(BenchmarkPrice).filter(
+            BenchmarkPrice.symbol == self.benchmark_manager.symbol,
+            BenchmarkPrice.date >= extended_start,
+            BenchmarkPrice.date <= end_date
+        ).order_by(BenchmarkPrice.date).all()
         
-        if not benchmark_data:
+        if not benchmark_prices:
             logger.warning("No benchmark data available for MA calculation")
             return pd.DataFrame()
         
         # Converter para DataFrame
-        df = pd.DataFrame(benchmark_data)
+        df = pd.DataFrame([
+            {'date': p.date, 'price': p.close}
+            for p in benchmark_prices
+        ])
         df = df.sort_values('date')
         
         # Calcular média móvel
-        df['ma'] = df['adj_close'].rolling(window=self.ma_period, min_periods=self.ma_period).mean()
+        df['ma'] = df['price'].rolling(window=self.ma_period, min_periods=self.ma_period).mean()
         
         # Filtrar para período solicitado
         df = df[df['date'] >= start_date]
-        
-        # Renomear colunas
-        df = df.rename(columns={'adj_close': 'price'})
         
         return df[['date', 'price', 'ma']]
     

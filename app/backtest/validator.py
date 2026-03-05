@@ -114,16 +114,16 @@ class BacktestDataValidator:
             logger.debug(f"Tickers com scores faltantes: {missing_data_tickers[:10]}")
         
         # 5. Verificar benchmark
-        benchmark_count = self.benchmark_manager.get_benchmark_data(
+        benchmark_returns = self.benchmark_manager.get_benchmark_returns(
             start_date=start_date,
             end_date=end_date
         )
         
-        if not benchmark_count:
+        if not benchmark_returns:
             warnings.append("WARNING: Benchmark não disponível no período")
             benchmark_count = 0
         else:
-            benchmark_count = len(benchmark_count)
+            benchmark_count = len(benchmark_returns)
         
         # 6. Verificar preços históricos
         price_count = self.db.query(RawPriceDaily).filter(
