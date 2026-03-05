@@ -9,7 +9,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 import logging
 
-from app.models.schemas import ScoreDaily, PriceHistory
+from app.models.schemas import ScoreDaily, RawPriceDaily
 from app.backtest.benchmark import BenchmarkManager
 
 logger = logging.getLogger(__name__)
@@ -126,9 +126,9 @@ class BacktestDataValidator:
             benchmark_count = len(benchmark_count)
         
         # 6. Verificar preços históricos
-        price_count = self.db.query(PriceHistory).filter(
-            PriceHistory.date >= start_date,
-            PriceHistory.date <= end_date
+        price_count = self.db.query(RawPriceDaily).filter(
+            RawPriceDaily.date >= start_date,
+            RawPriceDaily.date <= end_date
         ).count()
         
         if price_count == 0:
@@ -200,8 +200,8 @@ class BacktestDataValidator:
             )
         
         # Verificar preços disponíveis na data
-        available_prices = self.db.query(PriceHistory).filter(
-            PriceHistory.date == rebalance_date
+        available_prices = self.db.query(RawPriceDaily).filter(
+            RawPriceDaily.date == rebalance_date
         ).count()
         
         if available_prices == 0:
