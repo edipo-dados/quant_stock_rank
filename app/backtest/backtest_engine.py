@@ -271,6 +271,7 @@ class BacktestEngine:
             
             # Inicializar variáveis
             portfolio_history = []
+            portfolio_scores = []  # Adicionar histórico de scores
             monthly_returns = []
             
             logger.info(f"Running backtest with {len(rebalance_dates)} rebalance periods")
@@ -312,6 +313,8 @@ class BacktestEngine:
                     weights = portfolio.calculate_score_weights()
                 
                 portfolio_history.append(weights)
+                # Salvar scores dos ativos selecionados
+                portfolio_scores.append({ticker: scores_dict.get(ticker, 0.0) for ticker in selected_tickers})
                 
                 # Obter retornos do período
                 period_returns = self.get_monthly_returns(
@@ -355,7 +358,8 @@ class BacktestEngine:
                 'use_smoothing': self.use_smoothing,
                 'metrics': metrics,
                 'monthly_returns': monthly_returns,
-                'portfolio_history': portfolio_history
+                'portfolio_history': portfolio_history,
+                'portfolio_scores': portfolio_scores  # Adicionar scores ao resultado
             }
             
             logger.info(

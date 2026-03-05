@@ -143,16 +143,19 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
             # Converter posições
             positions = []
             portfolio_history = result['portfolio_history']
+            portfolio_scores = result.get('portfolio_scores', [])
             
             for i, weights in enumerate(portfolio_history):
                 if i < len(rebalance_dates):
                     rebalance_date = rebalance_dates[i]
+                    scores = portfolio_scores[i] if i < len(portfolio_scores) else {}
+                    
                     for ticker, weight in weights.items():
                         positions.append({
                             'date': rebalance_date,
                             'ticker': ticker,
                             'weight': weight,
-                            'score_at_selection': None
+                            'score_at_selection': scores.get(ticker)
                         })
             
             # Preparar métricas
