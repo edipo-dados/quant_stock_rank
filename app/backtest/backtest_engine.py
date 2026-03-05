@@ -268,6 +268,24 @@ class BacktestEngine:
             close_db = False
         
         try:
+            # VALIDAÇÃO DE DADOS (NOVO)
+            from app.backtest.validator import BacktestDataValidator
+            validator = BacktestDataValidator(db)
+            
+            logger.info("Validando dados antes de executar backtest...")
+            validation_result = validator.validate_universe(
+                start_date=self.start_date,
+                end_date=self.end_date,
+                min_scores_required=self.top_n
+            )
+            
+            validator.log_validation_summary(validation_result)
+            
+            if not validation_result['valid']:
+                raise ValueError(
+                    "Validação de dados falhou. Verifique os logs para detalhes."
+                )
+            
             # Criar snapshots mensais se necessário
             self.create_monthly_snapshots(db)
             

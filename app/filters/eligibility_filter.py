@@ -36,9 +36,10 @@ class EligibilityFilter:
         Initialize the eligibility filter with configuration.
         
         Args:
-            config: Settings object containing minimum_volume threshold
+            config: Settings object containing minimum_volume and minimum_market_cap thresholds
         """
         self.minimum_volume = config.minimum_volume
+        self.minimum_market_cap = config.minimum_market_cap
     
     def is_eligible(
         self,
@@ -116,6 +117,15 @@ class EligibilityFilter:
                 exclusion_reasons.append("missing_shareholders_equity")
             else:
                 exclusion_reasons.append("negative_or_zero_equity")
+        
+        # NEW: Check market_cap >= minimum_market_cap (1 billion BRL)
+        market_cap = fundamentals.get('market_cap')
+        if market_cap is not None:
+            if market_cap < self.minimum_market_cap:
+                exclusion_reasons.append("low_market_cap")
+        else:
+            # Market cap missing - log warning but don't exclude
+            logger.debug(f"Market cap missing for {ticker}, cannot check minimum threshold")
         
         # Check revenue > 0 (Requirement 1.4)
         # Always required for all companies

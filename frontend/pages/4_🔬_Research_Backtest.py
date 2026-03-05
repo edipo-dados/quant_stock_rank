@@ -314,6 +314,185 @@ def display_equity_curve(run_id):
         db.close()
 
 
+def display_drawdown_chart(run_id):
+    """Exibe gráfico de drawdown ao longo do tempo."""
+    db = SessionLocal()
+    
+    try:
+        service = BacktestService(db)
+        equity_curve = service.get_equity_curve(run_id)
+        
+        if not equity_curve:
+            st.warning("Sem dados de equity curve disponíveis")
+            return
+        
+        st.subheader("📉 Drawdown ao Longo do Tempo")
+        
+        df = pd.DataFrame(equity_curve)
+        
+        # Calcular drawdown
+        df['cummax'] = df['nav'].cummax()
+        df['drawdown'] = (df['nav'] - df['cummax']) / df['cummax']
+        
+        # Calcular drawdown do benchmark se disponível
+        if 'benchmark_nav' in df.columns and df['benchmark_nav'].notna().any():
+            df['benchmark_cummax'] = df['benchmark_nav'].cummax()
+            df['benchmark_drawdown'] = (df['benchmark_nav'] - df['benchmark_cummax']) / df['benchmark_cummax']
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=df['date'],
+            y=df['drawdown'] * 100,
+            mode='lines',
+            name='Portfolio Drawdown',
+            fill='tozeroy',
+            line=dict(color='red', width=2)
+        ))
+        
+        if 'benchmark_drawdown' in df.columns:
+            fig.add_trace(go.Scatter(
+                x=df['date'],
+                y=df['benchmark_drawdown'] * 100,
+                mode='lines',
+                name='Benchmark Drawdown',
+                fill='tozeroy',
+                line=dict(color='orange', width=2, dash='dash'),
+                opacity=0.5
+            ))
+        
+        fig.update_layout(
+            title="Drawdown ao Longo do Tempo",
+            xaxis_title="Data",
+            yaxis_title="Drawdown (%)",
+            hovermode='x unified',
+            template='plotly_white',
+            height=400
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+    finally:
+        db.close()
+
+
+def display_annual_returns(run_id):
+    """Exibe tabela de retornos anuais."""
+    db = SessionLocal()
+    
+    try:
+        service = BacktestService(db)
+        equity_curve = service.get_equity_curve(run_id)
+        
+        if not equity_curve:
+            st.warning("Sem dados disponíveis")
+            return
+        
+        st.subheader("📅 Retornos Anuais")
+        
+        df = pd.DataFrame(equity_curve)
+        df['date'] = pd.to_datetime(df['date'])
+        df['year'] = df['date'].dt.year
+        
+        # Calcular retorno por ano
+        annual_returns = []
+        for year in sorted(df['year'].unique()):
+            year_data = df[df['year'] == year]
+            if len(year_data) > 1:
+                start_nav = year_data['nav'].iloc[0]
+                end_nav = year_data['nav'].iloc[-1]
+                annual_return = (end_nav - start_nav) / start_nav
+                
+                # Benchmark se disponível
+                benchmark_return = None
+                if 'benchmark_nav' in df.columns and df['benchmark_nav'].notna().any():
+                    start_bench = year_data['benchmark_nav'].iloc[0]
+                    end_bench = year_data['benchmark_nav'].iloc[-1]
+                    if pd.notna(start_bench) and pd.notna(end_bench) and start_bench > 0:
+                        benchmark_return = (end_bench - start_bench) / start_bench
+                
+                annual_returns.append({
+                    'Ano': int(year),
+                    'Retorno Portfolio': f"{annual_return:.2%}",
+                    'Retorno Benchmark': f"{benchmark_return:.2%}" if benchmark_return is not None else "N/A",
+                    'Outperformance': f"{(annual_return - benchmark_return):.2%}" if benchmark_return is not None else "N/A"
+                })
+        
+        if annual_returns:
+            df_annual = pd.DataFrame(annual_returns)
+            st.dataframe(df_annual, use_container_width=True, hide_index=True)
+        else:
+            st.info("Dados insuficientes para calcular retornos anuais")
+        
+    finally:
+        db.close()
+
+
+def display_turnover_chart(run_id):
+    """Exibe gráfico de turnover ao longo do tempo."""
+    db = SessionLocal()
+    
+    try:
+        from app.backtest.repository import BacktestRepository
+        repo = BacktestRepository(db)
+        
+        rebalance_dates = repo.get_rebalance_dates(run_id)
+        
+        if not rebalance_dates or len(rebalance_dates) < 2:
+            st.info("Dados insuficientes para calcular turnover")
+            return
+        
+        st.subheader("🔄 Turnover por Rebalanceamento")
+        
+        # Buscar turnover de cada rebalance
+        turnovers = []
+        for i, rebal_date in enumerate(rebalance_dates):
+            if i == 0:
+                continue  # Primeiro rebalance não tem turnover
+            
+            # Buscar posições do rebalance anterior e atual
+            prev_positions = repo.get_positions(run_id, rebalance_dates[i-1])
+            curr_positions = repo.get_positions(run_id, rebal_date)
+            
+            # Calcular turnover
+            prev_tickers = {pos.ticker for pos in prev_positions}
+            curr_tickers = {pos.ticker for pos in curr_positions}
+            
+            # Tickers que saíram ou entraram
+            changed_tickers = prev_tickers.symmetric_difference(curr_tickers)
+            turnover = len(changed_tickers) / max(len(prev_tickers), 1)
+            
+            turnovers.append({
+                'date': rebal_date,
+                'turnover': turnover
+            })
+        
+        if turnovers:
+            df_turnover = pd.DataFrame(turnovers)
+            
+            fig = go.Figure()
+            
+            fig.add_trace(go.Bar(
+                x=df_turnover['date'],
+                y=df_turnover['turnover'] * 100,
+                name='Turnover',
+                marker_color='#0066cc'
+            ))
+            
+            fig.update_layout(
+                title="Turnover por Rebalanceamento",
+                xaxis_title="Data",
+                yaxis_title="Turnover (%)",
+                template='plotly_white',
+                height=400
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+    finally:
+        db.close()
+
+
 def display_positions(run_id):
     """Exibe tabela de posições do último rebalance."""
     db = SessionLocal()
@@ -583,6 +762,17 @@ def main():
                 display_metrics(summary['metrics'])
                 st.markdown("---")
                 display_equity_curve(run_id)
+                st.markdown("---")
+                display_drawdown_chart(run_id)
+                st.markdown("---")
+                
+                # Duas colunas para retornos anuais e turnover
+                col1, col2 = st.columns(2)
+                with col1:
+                    display_annual_returns(run_id)
+                with col2:
+                    display_turnover_chart(run_id)
+                
                 st.markdown("---")
                 display_positions(run_id)
                 

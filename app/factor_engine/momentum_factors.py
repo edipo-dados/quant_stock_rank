@@ -159,6 +159,51 @@ class MomentumFactorCalculator:
         except (TypeError, ValueError, KeyError) as e:
             raise CalculationError(f"Error calculating 1m return: {e}")
     
+    def calculate_return_3m(self, prices: pd.DataFrame) -> float:
+        """
+        Calcula retorno acumulado dos últimos 3 meses.
+        
+        Retorno = (Preço_final / Preço_inicial) - 1
+        
+        Args:
+            prices: DataFrame com coluna 'adj_close' e índice de datas,
+                   ordenado cronologicamente (mais antigo primeiro)
+            
+        Returns:
+            Retorno de 3 meses como float
+            
+        Raises:
+            InsufficientDataError: Se não há dados suficientes (mínimo ~63 dias úteis)
+            CalculationError: Se preço inicial é zero ou inválido
+        """
+        try:
+            if len(prices) < 63:  # ~3 meses de dias úteis
+                raise InsufficientDataError(
+                    f"Need at least 63 days for 3m return, got {len(prices)}"
+                )
+            
+            if 'adj_close' not in prices.columns:
+                raise InsufficientDataError("Missing 'adj_close' column in prices")
+            
+            # Pegar últimos 63 dias úteis (~3 meses)
+            recent_prices = prices.tail(63)
+            
+            initial_price = recent_prices['adj_close'].iloc[0]
+            final_price = recent_prices['adj_close'].iloc[-1]
+            
+            if pd.isna(initial_price) or pd.isna(final_price):
+                raise InsufficientDataError("Missing price data for 3m return")
+            
+            if initial_price <= 0:
+                raise CalculationError(
+                    f"Invalid initial price for 3m return: {initial_price}"
+                )
+            
+            return (final_price / initial_price) - 1
+            
+        except (TypeError, ValueError, KeyError) as e:
+            raise CalculationError(f"Error calculating 3m return: {e}")
+    
     def calculate_momentum_12m_ex_1m(self, prices: pd.DataFrame) -> float:
         """
         Calcula momentum de 12 meses excluindo o último mês (acadêmico).
@@ -375,6 +420,50 @@ class MomentumFactorCalculator:
         except (TypeError, ValueError, KeyError) as e:
             raise CalculationError(f"Error calculating 180d volatility: {e}")
     
+    def calculate_volatility_1y(self, prices: pd.DataFrame) -> float:
+        """
+        Calcula volatilidade de 1 ano (252 dias úteis).
+        
+        Volatilidade = std(retornos diários) * sqrt(252) (anualizada)
+        
+        Args:
+            prices: DataFrame com coluna 'adj_close' e índice de datas,
+                   ordenado cronologicamente (mais antigo primeiro)
+            
+        Returns:
+            Volatilidade anualizada como float
+            
+        Raises:
+            InsufficientDataError: Se não há dados suficientes (mínimo 253 dias)
+            CalculationError: Se cálculo falhar
+        """
+        try:
+            if len(prices) < 253:
+                raise InsufficientDataError(
+                    f"Need at least 253 days for 1y volatility, got {len(prices)}"
+                )
+            
+            if 'adj_close' not in prices.columns:
+                raise InsufficientDataError("Missing 'adj_close' column in prices")
+            
+            recent_prices = prices.tail(253)
+            returns = recent_prices['adj_close'].pct_change().dropna()
+            
+            if len(returns) < 252:
+                raise InsufficientDataError("Insufficient returns for volatility")
+            
+            daily_std = returns.std()
+            
+            if pd.isna(daily_std):
+                raise InsufficientDataError("Could not calculate standard deviation")
+            
+            annualized_vol = daily_std * np.sqrt(252)
+            
+            return annualized_vol
+            
+        except (TypeError, ValueError, KeyError) as e:
+            raise CalculationError(f"Error calculating 1y volatility: {e}")
+    
     def calculate_recent_drawdown(self, prices: pd.DataFrame) -> float:
         """
         Calcula drawdown desde o pico recente (últimos 90 dias).
@@ -474,6 +563,46 @@ class MomentumFactorCalculator:
         except (TypeError, ValueError, KeyError) as e:
             raise CalculationError(f"Error calculating 3y max drawdown: {e}")
     
+    def calculate_max_drawdown_1y(self, prices: pd.DataFrame) -> float:
+        """
+        Calcula drawdown máximo de 1 ano (252 dias úteis).
+        
+        Drawdown máximo = min((Preço - Pico_anterior) / Pico_anterior)
+        
+        Args:
+            prices: DataFrame com coluna 'adj_close' e índice de datas,
+                   ordenado cronologicamente (mais antigo primeiro)
+            
+        Returns:
+            Drawdown máximo como float (valor negativo ou zero)
+            
+        Raises:
+            InsufficientDataError: Se não há dados suficientes (mínimo 252 dias)
+            CalculationError: Se cálculo falhar
+        """
+        try:
+            if len(prices) < 252:
+                raise InsufficientDataError(
+                    f"Need at least 252 days for 1y max drawdown, got {len(prices)}"
+                )
+            
+            if 'adj_close' not in prices.columns:
+                raise InsufficientDataError("Missing 'adj_close' column in prices")
+            
+            recent_prices = prices.tail(252)
+            close_prices = recent_prices['adj_close']
+            running_max = close_prices.expanding().max()
+            drawdowns = (close_prices - running_max) / running_max
+            max_drawdown = drawdowns.min()
+            
+            if pd.isna(max_drawdown):
+                raise InsufficientDataError("Could not calculate max drawdown")
+            
+            return max_drawdown
+            
+        except (TypeError, ValueError, KeyError) as e:
+            raise CalculationError(f"Error calculating 1y max drawdown: {e}")
+    
     def calculate_all_factors(
         self,
         ticker: str,
@@ -522,6 +651,13 @@ class MomentumFactorCalculator:
             logger.warning(f"Could not calculate 1m return for {ticker}: {e}")
             factors['return_1m'] = None
         
+        # Return 3m (NOVO)
+        try:
+            factors['return_3m'] = self.calculate_return_3m(prices)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate 3m return for {ticker}: {e}")
+            factors['return_3m'] = None
+        
         # Momentum 12m ex 1m (acadêmico - novo)
         try:
             factors['momentum_12m_ex_1m'] = self.calculate_momentum_12m_ex_1m(prices)
@@ -557,6 +693,13 @@ class MomentumFactorCalculator:
             logger.warning(f"Could not calculate 180d volatility for {ticker}: {e}")
             factors['volatility_180d'] = None
         
+        # Volatility 1y (NOVO)
+        try:
+            factors['volatility_1y'] = self.calculate_volatility_1y(prices)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate 1y volatility for {ticker}: {e}")
+            factors['volatility_1y'] = None
+        
         # Recent Drawdown
         try:
             factors['recent_drawdown'] = self.calculate_recent_drawdown(prices)
@@ -570,5 +713,12 @@ class MomentumFactorCalculator:
         except (InsufficientDataError, CalculationError) as e:
             logger.warning(f"Could not calculate 3y max drawdown for {ticker}: {e}")
             factors['max_drawdown_3y'] = None
+        
+        # Max Drawdown 1y (NOVO)
+        try:
+            factors['max_drawdown_1y'] = self.calculate_max_drawdown_1y(prices)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate 1y max drawdown for {ticker}: {e}")
+            factors['max_drawdown_1y'] = None
         
         return factors

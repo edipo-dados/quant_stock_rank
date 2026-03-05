@@ -157,6 +157,57 @@ class FundamentalFactorCalculator:
         except (TypeError, ZeroDivisionError) as e:
             raise CalculationError(f"Error calculating ROE: {e}")
     
+    def calculate_roic(self, fundamentals: Dict[str, float]) -> float:
+        """
+        Calcula ROIC (Return on Invested Capital).
+        
+        ROIC = NOPAT / Invested Capital
+        
+        Onde:
+        - NOPAT = Net Operating Profit After Tax ≈ EBITDA * (1 - tax_rate)
+        - Invested Capital = Total Assets - Current Liabilities
+        
+        Simplificação (quando não temos tax_rate):
+        ROIC ≈ Net Income / (Total Assets - Current Liabilities)
+        
+        Args:
+            fundamentals: Dict com net_income, total_assets, current_liabilities
+            
+        Returns:
+            ROIC como float (ex: 0.15 para 15%)
+            
+        Raises:
+            InsufficientDataError: Se dados necessários estão faltando
+            CalculationError: Se invested capital é zero ou negativo
+        """
+        try:
+            net_income = fundamentals.get('net_income')
+            total_assets = fundamentals.get('total_assets')
+            current_liabilities = fundamentals.get('current_liabilities')
+            
+            if net_income is None or total_assets is None:
+                raise InsufficientDataError(
+                    "Missing net_income or total_assets for ROIC calculation"
+                )
+            
+            # Se current_liabilities não disponível, usar total_assets como proxy
+            if current_liabilities is None:
+                invested_capital = total_assets
+            else:
+                invested_capital = total_assets - current_liabilities
+            
+            if invested_capital <= 0:
+                raise CalculationError(
+                    f"Invalid invested capital for ROIC: {invested_capital}"
+                )
+            
+            roic = net_income / invested_capital
+            
+            return roic
+            
+        except (TypeError, ZeroDivisionError) as e:
+            raise CalculationError(f"Error calculating ROIC: {e}")
+    
     def calculate_net_margin(self, fundamentals: Dict) -> float:
         """
         Calcula Margem Líquida.
@@ -1116,6 +1167,13 @@ class FundamentalFactorCalculator:
         else:
             factors['roe_volatility'] = None
             factors['roe_volatility_confidence'] = 0.33
+        
+        # ROIC (NOVO)
+        try:
+            factors['roic'] = self.calculate_roic(fundamentals_data)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate ROIC for {ticker}: {e}")
+            factors['roic'] = None
         
         # Net Margin
         try:

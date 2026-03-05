@@ -70,24 +70,26 @@ class ScoringEngine:
             from app.config import settings
             config = settings
         
-        self.momentum_weight = config.momentum_weight
-        self.quality_weight = config.quality_weight
-        self.value_weight = config.value_weight
-        self.size_weight = config.size_weight
+        self.momentum_weight = config.momentum_weight  # 0.4
+        self.quality_weight = config.quality_weight    # 0.2
+        self.value_weight = config.value_weight        # 0.3
+        self.risk_weight = config.risk_weight          # 0.1
+        self.size_weight = config.size_weight          # 0.0
         
-        # Validar que pesos somam aproximadamente 1.0 (se size_weight = 0)
-        total_weight = self.momentum_weight + self.quality_weight + self.value_weight + self.size_weight
+        # Validar que pesos somam aproximadamente 1.0
+        total_weight = (self.momentum_weight + self.quality_weight + 
+                       self.value_weight + self.risk_weight + self.size_weight)
         if abs(total_weight - 1.0) > 0.01:
             logger.warning(
                 f"Weights do not sum to 1.0: momentum={self.momentum_weight}, "
                 f"quality={self.quality_weight}, value={self.value_weight}, "
-                f"size={self.size_weight}, total={total_weight}"
+                f"risk={self.risk_weight}, size={self.size_weight}, total={total_weight}"
             )
         
         logger.info(
             f"ScoringEngine initialized with weights: "
             f"momentum={self.momentum_weight}, quality={self.quality_weight}, "
-            f"value={self.value_weight}, size={self.size_weight}"
+            f"value={self.value_weight}, risk={self.risk_weight}, size={self.size_weight}"
         )
     
     def calculate_momentum_score(self, factors: Dict[str, float]) -> float:
@@ -439,11 +441,56 @@ class ScoringEngine:
         # Valores positivos = empresas menores = size premium
         return size_factor
     
+    def calculate_risk_score(self, factors: Dict[str, float]) -> float:
+        """
+        Calcula score de risco (Low Volatility Premium).
+        
+        Menor risco é melhor, então invertemos os sinais:
+        - volatility_90d: INVERTIDO (menor é melhor)
+        - volatility_1y: INVERTIDO (menor é melhor)
+        - max_drawdown_1y: INVERTIDO (menor drawdown é melhor)
+        
+        Args:
+            factors: Dicionário com fatores normalizados
+            
+        Returns:
+            Score de risco (média dos fatores invertidos)
+        """
+        import math
+        
+        risk_factors = []
+        
+        # Volatilidade 90 dias (invertido)
+        vol_90d = factors.get('volatility_90d')
+        if vol_90d is not None and not (isinstance(vol_90d, float) and math.isnan(vol_90d)):
+            risk_factors.append(-vol_90d)  # Invertido
+        
+        # Volatilidade 1 ano (invertido)
+        vol_1y = factors.get('volatility_1y')
+        if vol_1y is not None and not (isinstance(vol_1y, float) and math.isnan(vol_1y)):
+            risk_factors.append(-vol_1y)  # Invertido
+        
+        # Max Drawdown 1 ano (invertido)
+        max_dd_1y = factors.get('max_drawdown_1y')
+        if max_dd_1y is not None and not (isinstance(max_dd_1y, float) and math.isnan(max_dd_1y)):
+            risk_factors.append(-max_dd_1y)  # Invertido (drawdown é negativo)
+        
+        # Se nenhum fator disponível, retorna NaN
+        if not risk_factors:
+            import numpy as np
+            return np.nan
+        
+        # Calcular média
+        risk_score = sum(risk_factors) / len(risk_factors)
+        
+        return risk_score
+    
     def calculate_final_score(
         self, 
         momentum_score: float,
         quality_score: float,
         value_score: float,
+        risk_score: float = 0.0,
         size_score: float = 0.0
     ) -> float:
         """
@@ -456,12 +503,14 @@ class ScoringEngine:
         final_score = (momentum_weight * momentum_score +
                       quality_weight * quality_score +
                       value_weight * value_score +
+                      risk_weight * risk_score +
                       size_weight * size_score)
         
         Args:
             momentum_score: Score de momentum (pode ser NaN)
             quality_score: Score de qualidade (pode ser NaN)
             value_score: Score de valor (pode ser NaN)
+            risk_score: Score de risco (opcional, default 0.0, pode ser NaN)
             size_score: Score de tamanho (opcional, default 0.0, pode ser NaN)
             
         Returns:
@@ -482,6 +531,9 @@ class ScoringEngine:
         
         if not np.isnan(value_score):
             scores_and_weights.append((value_score, self.value_weight))
+        
+        if risk_score != 0.0 and not np.isnan(risk_score):
+            scores_and_weights.append((risk_score, self.risk_weight))
         
         if size_score != 0.0 and not np.isnan(size_score):
             scores_and_weights.append((size_score, self.size_weight))
@@ -520,7 +572,8 @@ class ScoringEngine:
                                 (roe, net_margin, revenue_growth_3y, debt_to_ebitda,
                                  pe_ratio, ev_ebitda, pb_ratio, price_to_book, fcf_yield, size_factor)
             momentum_factors: Dicionário com fatores de momentum normalizados
-                            (momentum_6m_ex_1m, momentum_12m_ex_1m, volatility_90d, recent_drawdown)
+                            (momentum_6m_ex_1m, momentum_12m_ex_1m, volatility_90d, 
+                             volatility_1y, recent_drawdown, max_drawdown_1y)
             confidence: Score de confiança (0-1), default 0.5
             
         Returns:
@@ -538,10 +591,13 @@ class ScoringEngine:
         momentum_score = self.calculate_momentum_score(momentum_factors)
         quality_score = self.calculate_quality_score(fundamental_factors)
         value_score = self.calculate_value_score(fundamental_factors)
+        risk_score = self.calculate_risk_score(all_factors)
         size_score = self.calculate_size_score(fundamental_factors)
         
         # Calcular score final
-        final_score = self.calculate_final_score(momentum_score, quality_score, value_score, size_score)
+        final_score = self.calculate_final_score(
+            momentum_score, quality_score, value_score, risk_score, size_score
+        )
         
         # Criar resultado
         result = ScoreResult(
@@ -557,7 +613,7 @@ class ScoringEngine:
         logger.debug(
             f"Scored {ticker}: final={final_score:.3f}, "
             f"momentum={momentum_score:.3f}, quality={quality_score:.3f}, "
-            f"value={value_score:.3f}, size={size_score:.3f}"
+            f"value={value_score:.3f}, risk={risk_score:.3f}, size={size_score:.3f}"
         )
         
         return result
