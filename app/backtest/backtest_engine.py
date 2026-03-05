@@ -352,10 +352,11 @@ class BacktestEngine:
                     benchmark_returns.append(0.0)
                     logger.warning(f"No benchmark return for period {rebalance_date} to {next_rebalance}")
                 
+                benchmark_str = f"{benchmark_return*100:.2f}%" if benchmark_return is not None else "N/A"
                 logger.info(
                     f"Period {rebalance_date} to {next_rebalance}: "
                     f"portfolio={portfolio_return*100:.2f}%, "
-                    f"benchmark={benchmark_return*100:.2f}% if benchmark_return else 'N/A', "
+                    f"benchmark={benchmark_str}, "
                     f"assets={len(selected_tickers)}"
                 )
             
