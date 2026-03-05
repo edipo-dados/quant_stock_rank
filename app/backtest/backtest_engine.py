@@ -21,6 +21,7 @@ from app.models.schemas import ScoreDaily, RankingHistory, BacktestResult
 from app.models.database import SessionLocal
 from app.backtest.portfolio import Portfolio
 from app.backtest.metrics import PerformanceMetrics
+from app.backtest.benchmark import BenchmarkManager
 from app.ingestion.yahoo_client import YahooFinanceClient
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,8 @@ class BacktestEngine:
         rebalance_frequency: str = 'monthly',
         weight_method: str = 'equal',
         use_smoothing: bool = False,
-        risk_free_rate: float = 0.0
+        risk_free_rate: float = 0.0,
+        benchmark_symbol: str = '^BVSP'
     ):
         """
         Inicializa engine de backtest.
@@ -62,6 +64,7 @@ class BacktestEngine:
             weight_method: Método de ponderação ('equal' ou 'score_weighted')
             use_smoothing: Se usa score suavizado
             risk_free_rate: Taxa livre de risco anualizada (ex: 0.05 para 5%)
+            benchmark_symbol: Símbolo do benchmark (padrão: ^BVSP)
         """
         self.start_date = start_date
         self.end_date = end_date
@@ -70,12 +73,14 @@ class BacktestEngine:
         self.weight_method = weight_method
         self.use_smoothing = use_smoothing
         self.risk_free_rate = risk_free_rate
+        self.benchmark_symbol = benchmark_symbol
         
         self.yahoo_client = YahooFinanceClient()
         
         logger.info(
             f"BacktestEngine initialized: {start_date} to {end_date}, "
-            f"top_n={top_n}, weight={weight_method}, smoothing={use_smoothing}"
+            f"top_n={top_n}, weight={weight_method}, smoothing={use_smoothing}, "
+            f"benchmark={benchmark_symbol}"
         )
     
     def get_monthly_dates(self) -> List[date]:
@@ -269,10 +274,14 @@ class BacktestEngine:
             # Obter datas de rebalanceamento
             rebalance_dates = self.get_monthly_dates()
             
+            # Inicializar benchmark manager
+            benchmark_manager = BenchmarkManager(db, symbol=self.benchmark_symbol)
+            
             # Inicializar variáveis
             portfolio_history = []
             portfolio_scores = []  # Adicionar histórico de scores
             monthly_returns = []
+            benchmark_returns = []
             
             logger.info(f"Running backtest with {len(rebalance_dates)} rebalance periods")
             
@@ -331,18 +340,35 @@ class BacktestEngine:
                 
                 monthly_returns.append(portfolio_return)
                 
+                # Obter retorno do benchmark para o mesmo período
+                benchmark_return = benchmark_manager.get_period_return(
+                    rebalance_date,
+                    next_rebalance
+                )
+                
+                if benchmark_return is not None:
+                    benchmark_returns.append(benchmark_return)
+                else:
+                    benchmark_returns.append(0.0)
+                    logger.warning(f"No benchmark return for period {rebalance_date} to {next_rebalance}")
+                
                 logger.info(
                     f"Period {rebalance_date} to {next_rebalance}: "
-                    f"return={portfolio_return*100:.2f}%, assets={len(selected_tickers)}"
+                    f"portfolio={portfolio_return*100:.2f}%, "
+                    f"benchmark={benchmark_return*100:.2f}% if benchmark_return else 'N/A', "
+                    f"assets={len(selected_tickers)}"
                 )
             
             # Calcular métricas
             returns_series = pd.Series(monthly_returns)
+            benchmark_series = pd.Series(benchmark_returns) if benchmark_returns else None
+            
             metrics = PerformanceMetrics.calculate_all_metrics(
                 returns_series,
                 portfolio_history,
                 self.risk_free_rate,
-                periods_per_year=12
+                periods_per_year=12,
+                benchmark_returns=benchmark_series
             )
             
             # Adicionar estatísticas adicionais
@@ -358,6 +384,7 @@ class BacktestEngine:
                 'use_smoothing': self.use_smoothing,
                 'metrics': metrics,
                 'monthly_returns': monthly_returns,
+                'benchmark_returns': benchmark_returns,
                 'portfolio_history': portfolio_history,
                 'portfolio_scores': portfolio_scores  # Adicionar scores ao resultado
             }

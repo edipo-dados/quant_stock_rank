@@ -123,7 +123,9 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
             # Calcular NAV diário a partir dos retornos mensais
             nav_records = []
             nav = initial_capital
+            benchmark_nav = initial_capital
             monthly_returns = result['monthly_returns']
+            benchmark_returns = result.get('benchmark_returns', [])
             rebalance_dates = engine.get_monthly_dates()[:-1]  # Excluir última data
             
             for i, monthly_return in enumerate(monthly_returns):
@@ -132,12 +134,16 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
                     # Calcular NAV após o retorno mensal
                     nav = nav * (1 + monthly_return)
                     
+                    # Calcular benchmark NAV
+                    benchmark_return = benchmark_returns[i] if i < len(benchmark_returns) else 0.0
+                    benchmark_nav = benchmark_nav * (1 + benchmark_return)
+                    
                     nav_records.append({
                         'date': rebalance_date,
                         'nav': nav,
-                        'benchmark_nav': None,
+                        'benchmark_nav': benchmark_nav,
                         'daily_return': monthly_return,
-                        'benchmark_return': None
+                        'benchmark_return': benchmark_return
                     })
             
             # Converter posições
@@ -168,9 +174,9 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
                 'sortino_ratio': 0.0,  # Não calculado ainda
                 'max_drawdown': metrics_data['max_drawdown'] / 100.0,
                 'turnover_avg': metrics_data['avg_turnover'] / 100.0,
-                'alpha': None,
-                'beta': None,
-                'information_ratio': None
+                'alpha': metrics_data.get('alpha'),
+                'beta': metrics_data.get('beta'),
+                'information_ratio': metrics_data.get('information_ratio')
             }
             
             # Salvar resultados
@@ -196,13 +202,14 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
 
 
 def display_metrics(metrics):
-    """Exibe métricas em formato de cards."""
+    """Exibe métricas em formato de cards com comparação vs benchmark."""
     if not metrics:
         st.warning("Sem métricas disponíveis")
         return
     
     st.subheader("📊 Métricas de Performance")
     
+    # Primeira linha: Retornos
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -214,6 +221,7 @@ def display_metrics(metrics):
     with col4:
         st.metric("Max Drawdown", f"{metrics.max_drawdown:.2%}", delta_color="inverse")
     
+    # Segunda linha: Ratios
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -225,6 +233,27 @@ def display_metrics(metrics):
     with col4:
         if metrics.alpha is not None:
             st.metric("Alpha", f"{metrics.alpha:.2%}")
+    
+    # Terceira linha: Métricas vs Benchmark (se disponível)
+    if metrics.beta is not None or metrics.information_ratio is not None:
+        st.markdown("---")
+        st.subheader("📈 Comparação vs IBOVESPA")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if metrics.beta is not None:
+                st.metric("Beta", f"{metrics.beta:.2f}")
+        with col2:
+            if metrics.information_ratio is not None:
+                st.metric("Information Ratio", f"{metrics.information_ratio:.2f}")
+        with col3:
+            if metrics.alpha is not None:
+                delta_color = "normal" if metrics.alpha > 0 else "inverse"
+                st.metric("Alpha Anual", f"{metrics.alpha:.2%}", delta_color=delta_color)
+        with col4:
+            # Placeholder para futuras métricas
+            pass
 
 
 def display_equity_curve(run_id):
