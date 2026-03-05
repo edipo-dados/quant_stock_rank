@@ -318,6 +318,7 @@ class BacktestRepository:
             volatility=metrics['volatility'],
             sharpe_ratio=metrics['sharpe_ratio'],
             sortino_ratio=metrics['sortino_ratio'],
+            calmar_ratio=metrics.get('calmar_ratio'),
             max_drawdown=metrics['max_drawdown'],
             turnover_avg=metrics['turnover_avg'],
             alpha=metrics.get('alpha'),

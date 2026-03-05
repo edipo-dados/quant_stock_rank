@@ -129,6 +129,7 @@ class BacktestMetrics(Base):
     volatility = Column(Float, nullable=False)
     sharpe_ratio = Column(Float, nullable=False)
     sortino_ratio = Column(Float, nullable=False)
+    calmar_ratio = Column(Float, nullable=True)
     max_drawdown = Column(Float, nullable=False)
     
     # Métricas operacionais

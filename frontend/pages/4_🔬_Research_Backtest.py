@@ -230,7 +230,11 @@ def display_metrics(metrics):
     with col2:
         st.metric("Sortino Ratio", f"{metrics.sortino_ratio:.2f}")
     with col3:
-        st.metric("Calmar Ratio", f"{metrics.calmar_ratio:.2f}")
+        calmar = getattr(metrics, 'calmar_ratio', None)
+        if calmar is not None and not (isinstance(calmar, float) and (calmar == float('inf') or calmar != calmar)):
+            st.metric("Calmar Ratio", f"{calmar:.2f}")
+        else:
+            st.metric("Calmar Ratio", "N/A")
     with col4:
         st.metric("Turnover Médio", f"{metrics.turnover_avg:.2%}")
     
