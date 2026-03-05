@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import argparse
 from datetime import date, datetime, timedelta
 import logging
+import pandas as pd
 
 from sqlalchemy import text
 from app.models.database import SessionLocal, engine
@@ -127,9 +128,15 @@ def ingest_benchmark_data(start_date: date, end_date: date, symbol: str = "^BVSP
         
         logger.info(f"✓ {len(prices_df)} registros obtidos do Yahoo Finance")
         
-        # Preparar DataFrame
+        # Preparar DataFrame - garantir que temos apenas as colunas necessárias
+        prices_df = prices_df[['date', 'adj_close']].copy()
         prices_df = prices_df.rename(columns={'adj_close': 'close'})
-        prices_df = prices_df[['date', 'close']]
+        
+        # Garantir que date é do tipo date
+        if not isinstance(prices_df['date'].iloc[0], date):
+            prices_df['date'] = pd.to_datetime(prices_df['date']).dt.date
+        
+        logger.info(f"DataFrame preparado: {len(prices_df)} registros, colunas: {list(prices_df.columns)}")
         
         # Ingerir no banco
         logger.info("Salvando no banco de dados...")

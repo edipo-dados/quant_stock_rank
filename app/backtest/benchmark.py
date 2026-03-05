@@ -207,8 +207,11 @@ class BenchmarkManager:
             logger.warning("Empty DataFrame provided for benchmark ingestion")
             return 0
         
+        # Fazer cópia para não modificar o original
+        prices_df = prices_df.copy()
+        
         # Calcular retornos diários
-        prices_df = prices_df.sort_values('date')
+        prices_df = prices_df.sort_values('date').reset_index(drop=True)
         prices_df['daily_return'] = prices_df['close'].pct_change()
         
         records_inserted = 0
