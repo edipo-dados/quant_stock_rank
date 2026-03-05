@@ -242,7 +242,7 @@ if ranking_data:
             if st.button("📊 Ver Detalhes", use_container_width=True):
                 # Armazenar ticker selecionado no session state
                 st.session_state['selected_ticker'] = selected_ticker
-                st.switch_page("pages/2_📊_Detalhes_do_Ativo.py")
+                st.switch_page("pages/3_📊_Detalhes_do_Ativo.py")
         
         # Estatísticas do ranking
         st.divider()
