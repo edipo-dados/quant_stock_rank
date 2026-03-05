@@ -84,13 +84,14 @@ def validate_inputs(start_date, end_date):
 
 def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
                     transaction_cost, use_smoothing, alpha_smoothing):
-    """Executa backtest via UI."""
+    """Executa backtest via UI usando BacktestEngine real."""
     db = SessionLocal()
     
     try:
         with st.spinner('🔄 Executando backtest...'):
             service = BacktestService(db)
             
+            # Criar run
             run = service.create_backtest_run(
                 name=name if name else None,
                 start_date=start_date,
@@ -104,61 +105,72 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
             
             logger.info(f"Created backtest run: {run.id}")
             
-            # Gerar dados dummy (substituir por engine real)
-            import random
+            # Executar backtest real usando BacktestEngine
+            engine = BacktestEngine(
+                start_date=start_date,
+                end_date=end_date,
+                top_n=top_n,
+                rebalance_frequency='monthly',
+                weight_method='equal',
+                use_smoothing=use_smoothing,
+                risk_free_rate=0.0
+            )
+            
+            # Rodar backtest
+            result = engine.run_backtest(db)
+            
+            # Converter resultados para formato do repository
+            # Calcular NAV diário a partir dos retornos mensais
             nav_records = []
-            current_date = start_date
             nav = initial_capital
+            monthly_returns = result['monthly_returns']
+            rebalance_dates = engine.get_monthly_dates()[:-1]  # Excluir última data
             
-            while current_date <= end_date:
-                daily_return = random.uniform(-0.02, 0.02)
-                nav = nav * (1 + daily_return)
-                
-                nav_records.append({
-                    'date': current_date,
-                    'nav': nav,
-                    'benchmark_nav': initial_capital * 1.1,
-                    'daily_return': daily_return,
-                    'benchmark_return': 0.0003
-                })
-                
-                current_date += timedelta(days=1)
+            for i, monthly_return in enumerate(monthly_returns):
+                if i < len(rebalance_dates):
+                    rebalance_date = rebalance_dates[i]
+                    # Calcular NAV após o retorno mensal
+                    nav = nav * (1 + monthly_return)
+                    
+                    nav_records.append({
+                        'date': rebalance_date,
+                        'nav': nav,
+                        'benchmark_nav': None,
+                        'daily_return': monthly_return,
+                        'benchmark_return': None
+                    })
             
+            # Converter posições
             positions = []
-            tickers = ['PETR4.SA', 'VALE3.SA', 'ITUB4.SA', 'BBDC4.SA', 'ABEV3.SA']
-            current_date = start_date
+            portfolio_history = result['portfolio_history']
             
-            while current_date <= end_date:
-                if current_date.day == 1:
-                    weight = 1.0 / top_n
-                    for i in range(top_n):
+            for i, weights in enumerate(portfolio_history):
+                if i < len(rebalance_dates):
+                    rebalance_date = rebalance_dates[i]
+                    for ticker, weight in weights.items():
                         positions.append({
-                            'date': current_date,
-                            'ticker': tickers[i % len(tickers)],
+                            'date': rebalance_date,
+                            'ticker': ticker,
                             'weight': weight,
-                            'score_at_selection': random.uniform(0.5, 2.0)
+                            'score_at_selection': None
                         })
-                
-                current_date += timedelta(days=1)
             
-            total_return = (nav - initial_capital) / initial_capital
-            days = (end_date - start_date).days
-            years = days / 365.25
-            cagr = (1 + total_return) ** (1 / years) - 1
-            
+            # Preparar métricas
+            metrics_data = result['metrics']
             metrics = {
-                'total_return': total_return,
-                'cagr': cagr,
-                'volatility': 0.15,
-                'sharpe_ratio': 1.2,
-                'sortino_ratio': 1.5,
-                'max_drawdown': -0.12,
-                'turnover_avg': 0.25,
-                'alpha': 0.03,
-                'beta': 0.95,
-                'information_ratio': 0.8
+                'total_return': metrics_data['total_return'] / 100.0,  # Converter de % para decimal
+                'cagr': metrics_data['cagr'] / 100.0,
+                'volatility': metrics_data['volatility'] / 100.0,
+                'sharpe_ratio': metrics_data['sharpe_ratio'],
+                'sortino_ratio': 0.0,  # Não calculado ainda
+                'max_drawdown': metrics_data['max_drawdown'] / 100.0,
+                'turnover_avg': metrics_data['avg_turnover'] / 100.0,
+                'alpha': None,
+                'beta': None,
+                'information_ratio': None
             }
             
+            # Salvar resultados
             service.save_backtest_results(
                 run_id=run.id,
                 nav_records=nav_records,
@@ -172,6 +184,8 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
     except Exception as e:
         logger.error(f"Error running backtest: {e}")
         st.error(f"❌ Erro ao executar backtest: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
         
     finally:
