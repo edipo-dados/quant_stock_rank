@@ -45,13 +45,22 @@ class Portfolio:
         
         return self.weights
     
-    def calculate_score_weights(self) -> Dict[str, float]:
+    def calculate_score_weights(
+        self,
+        max_weight: float = 0.25,
+        use_risk_adjusted: bool = False,
+        volatilities: Dict[str, float] = None
+    ) -> Dict[str, float]:
         """
-        Calcula pesos proporcionais aos scores.
+        Calcula pesos proporcionais aos scores com limite máximo.
         
-        Pesos são normalizados para somar 1.0.
-        Scores negativos são tratados como 0.
+        Opcionalmente ajusta scores pelo risco (volatilidade).
         
+        Args:
+            max_weight: Peso máximo por ativo (ex: 0.25 = 25%)
+            use_risk_adjusted: Se True, ajusta scores pela volatilidade
+            volatilities: Dicionário {ticker: volatility} para ajuste de risco
+            
         Returns:
             Dicionário {ticker: weight}
         """
@@ -62,6 +71,14 @@ class Portfolio:
         portfolio_scores = {}
         for ticker in self.tickers:
             score = self.scores.get(ticker, 0.0)
+            
+            # Ajustar por risco se solicitado
+            if use_risk_adjusted and volatilities:
+                vol = volatilities.get(ticker)
+                if vol and vol > 0:
+                    # Score ajustado = score / volatilidade
+                    score = score / vol
+            
             # Tratar scores negativos como 0
             portfolio_scores[ticker] = max(0.0, score)
         
@@ -73,10 +90,51 @@ class Portfolio:
             return self.calculate_equal_weights()
         
         # Calcular pesos proporcionais
-        self.weights = {
+        raw_weights = {
             ticker: score / total_score
             for ticker, score in portfolio_scores.items()
         }
+        
+        # Aplicar limite máximo
+        capped_weights = {}
+        excess_weight = 0.0
+        
+        for ticker, weight in raw_weights.items():
+            if weight > max_weight:
+                capped_weights[ticker] = max_weight
+                excess_weight += (weight - max_weight)
+            else:
+                capped_weights[ticker] = weight
+        
+        # Redistribuir peso excedente proporcionalmente
+        if excess_weight > 0:
+            # Tickers que não atingiram o limite
+            uncapped_tickers = [t for t, w in capped_weights.items() if w < max_weight]
+            
+            if uncapped_tickers:
+                uncapped_total = sum(capped_weights[t] for t in uncapped_tickers)
+                
+                if uncapped_total > 0:
+                    for ticker in uncapped_tickers:
+                        # Redistribuir proporcionalmente
+                        additional = excess_weight * (capped_weights[ticker] / uncapped_total)
+                        capped_weights[ticker] += additional
+                        
+                        # Garantir que não ultrapasse o limite
+                        capped_weights[ticker] = min(capped_weights[ticker], max_weight)
+        
+        # Normalizar para somar exatamente 1.0
+        total_weight = sum(capped_weights.values())
+        if total_weight > 0:
+            self.weights = {
+                ticker: weight / total_weight
+                for ticker, weight in capped_weights.items()
+            }
+        else:
+            self.weights = self.calculate_equal_weights()
+        
+        logger.info(f"Calculated score-weighted portfolio: {len(self.weights)} assets")
+        logger.debug(f"Weights: {self.weights}")
         
         return self.weights
     

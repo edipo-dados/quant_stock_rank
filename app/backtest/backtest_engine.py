@@ -22,6 +22,7 @@ from app.models.database import SessionLocal
 from app.backtest.portfolio import Portfolio
 from app.backtest.metrics import PerformanceMetrics
 from app.backtest.benchmark import BenchmarkManager
+from app.backtest.market_regime import MarketRegimeFilter
 from app.ingestion.yahoo_client import YahooFinanceClient
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,11 @@ class BacktestEngine:
         weight_method: str = 'equal',
         use_smoothing: bool = False,
         risk_free_rate: float = 0.0,
-        benchmark_symbol: str = '^BVSP'
+        benchmark_symbol: str = '^BVSP',
+        use_market_regime: bool = False,
+        regime_ma_period: int = 200,
+        regime_bullish_exposure: float = 1.0,
+        regime_bearish_exposure: float = 0.5
     ):
         """
         Inicializa engine de backtest.
@@ -65,6 +70,10 @@ class BacktestEngine:
             use_smoothing: Se usa score suavizado
             risk_free_rate: Taxa livre de risco anualizada (ex: 0.05 para 5%)
             benchmark_symbol: Símbolo do benchmark (padrão: ^BVSP)
+            use_market_regime: Se aplica filtro de regime de mercado
+            regime_ma_period: Período da média móvel para regime (padrão: 200)
+            regime_bullish_exposure: Exposição em mercado de alta (padrão: 1.0)
+            regime_bearish_exposure: Exposição em mercado de baixa (padrão: 0.5)
         """
         self.start_date = start_date
         self.end_date = end_date
@@ -74,13 +83,17 @@ class BacktestEngine:
         self.use_smoothing = use_smoothing
         self.risk_free_rate = risk_free_rate
         self.benchmark_symbol = benchmark_symbol
+        self.use_market_regime = use_market_regime
+        self.regime_ma_period = regime_ma_period
+        self.regime_bullish_exposure = regime_bullish_exposure
+        self.regime_bearish_exposure = regime_bearish_exposure
         
         self.yahoo_client = YahooFinanceClient()
         
         logger.info(
             f"BacktestEngine initialized: {start_date} to {end_date}, "
             f"top_n={top_n}, weight={weight_method}, smoothing={use_smoothing}, "
-            f"benchmark={benchmark_symbol}"
+            f"benchmark={benchmark_symbol}, market_regime={use_market_regime}"
         )
     
     def get_monthly_dates(self) -> List[date]:
@@ -295,11 +308,24 @@ class BacktestEngine:
             # Inicializar benchmark manager
             benchmark_manager = BenchmarkManager(db, symbol=self.benchmark_symbol)
             
+            # Inicializar market regime filter se habilitado
+            market_regime_filter = None
+            if self.use_market_regime:
+                market_regime_filter = MarketRegimeFilter(
+                    db=db,
+                    ma_period=self.regime_ma_period,
+                    bullish_exposure=self.regime_bullish_exposure,
+                    bearish_exposure=self.regime_bearish_exposure,
+                    benchmark_symbol=self.benchmark_symbol
+                )
+                logger.info("Market regime filter enabled")
+            
             # Inicializar variáveis
             portfolio_history = []
             portfolio_scores = []  # Adicionar histórico de scores
             monthly_returns = []
             benchmark_returns = []
+            regime_history = []  # Histórico de regimes
             
             logger.info(f"Running backtest with {len(rebalance_dates)} rebalance periods")
             
@@ -339,6 +365,17 @@ class BacktestEngine:
                 else:
                     weights = portfolio.calculate_score_weights()
                 
+                # Aplicar filtro de regime de mercado se habilitado
+                regime = None
+                if market_regime_filter:
+                    weights = market_regime_filter.apply_regime_filter(weights, rebalance_date)
+                    regime = market_regime_filter.get_regime(rebalance_date)
+                    regime_history.append({
+                        'date': rebalance_date,
+                        'regime': regime,
+                        'exposure': market_regime_filter.get_exposure(rebalance_date)
+                    })
+                
                 portfolio_history.append(weights)
                 # Salvar scores dos ativos selecionados
                 portfolio_scores.append({ticker: scores_dict.get(ticker, 0.0) for ticker in selected_tickers})
@@ -371,11 +408,12 @@ class BacktestEngine:
                     logger.warning(f"No benchmark return for period {rebalance_date} to {next_rebalance}")
                 
                 benchmark_str = f"{benchmark_return*100:.2f}%" if benchmark_return is not None else "N/A"
+                regime_str = f", regime={regime}" if regime else ""
                 logger.info(
                     f"Period {rebalance_date} to {next_rebalance}: "
                     f"portfolio={portfolio_return*100:.2f}%, "
                     f"benchmark={benchmark_str}, "
-                    f"assets={len(selected_tickers)}"
+                    f"assets={len(selected_tickers)}{regime_str}"
                 )
             
             # Calcular métricas
@@ -401,11 +439,13 @@ class BacktestEngine:
                 'top_n': self.top_n,
                 'weight_method': self.weight_method,
                 'use_smoothing': self.use_smoothing,
+                'use_market_regime': self.use_market_regime,
                 'metrics': metrics,
                 'monthly_returns': monthly_returns,
                 'benchmark_returns': benchmark_returns,
                 'portfolio_history': portfolio_history,
-                'portfolio_scores': portfolio_scores  # Adicionar scores ao resultado
+                'portfolio_scores': portfolio_scores,
+                'regime_history': regime_history if self.use_market_regime else []
             }
             
             logger.info(

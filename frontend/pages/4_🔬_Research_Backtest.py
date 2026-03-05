@@ -83,7 +83,7 @@ def validate_inputs(start_date, end_date):
 
 
 def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
-                    transaction_cost, use_smoothing, alpha_smoothing):
+                    transaction_cost, use_smoothing, alpha_smoothing, use_market_regime):
     """Executa backtest via UI usando BacktestEngine real."""
     db = SessionLocal()
     
@@ -100,7 +100,7 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
                 top_n=top_n,
                 transaction_cost=transaction_cost / 100.0,
                 initial_capital=initial_capital,
-                notes=f"Smoothing: {use_smoothing}, Alpha: {alpha_smoothing if use_smoothing else 'N/A'}"
+                notes=f"Smoothing: {use_smoothing}, Alpha: {alpha_smoothing if use_smoothing else 'N/A'}, Market Regime: {use_market_regime}"
             )
             
             logger.info(f"Created backtest run: {run.id}")
@@ -113,7 +113,8 @@ def run_backtest_ui(name, start_date, end_date, top_n, initial_capital,
                 rebalance_frequency='monthly',
                 weight_method='equal',
                 use_smoothing=use_smoothing,
-                risk_free_rate=0.0
+                risk_free_rate=0.0,
+                use_market_regime=use_market_regime
             )
             
             # Rodar backtest
@@ -493,6 +494,90 @@ def display_turnover_chart(run_id):
         db.close()
 
 
+def display_rolling_sharpe(run_id, window_months=12):
+    """Exibe gráfico de Sharpe Ratio rolling."""
+    db = SessionLocal()
+    
+    try:
+        service = BacktestService(db)
+        equity_curve = service.get_equity_curve(run_id)
+        
+        if not equity_curve or len(equity_curve) < window_months:
+            st.info(f"Dados insuficientes para calcular Sharpe rolling de {window_months} meses")
+            return
+        
+        st.subheader(f"📊 Sharpe Ratio Rolling ({window_months} meses)")
+        
+        df = pd.DataFrame(equity_curve)
+        df = df.sort_values('date')
+        
+        # Calcular retornos
+        df['portfolio_return'] = df['daily_return']
+        
+        # Calcular Sharpe rolling
+        rolling_sharpe = []
+        for i in range(window_months - 1, len(df)):
+            window_returns = df['portfolio_return'].iloc[i - window_months + 1:i + 1]
+            
+            if len(window_returns) >= window_months:
+                mean_return = window_returns.mean()
+                std_return = window_returns.std()
+                
+                if std_return > 0:
+                    # Anualizar (assumindo retornos mensais)
+                    sharpe = (mean_return / std_return) * np.sqrt(12)
+                else:
+                    sharpe = 0.0
+                
+                rolling_sharpe.append({
+                    'date': df['date'].iloc[i],
+                    'sharpe': sharpe
+                })
+        
+        if rolling_sharpe:
+            df_sharpe = pd.DataFrame(rolling_sharpe)
+            
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatter(
+                x=df_sharpe['date'],
+                y=df_sharpe['sharpe'],
+                mode='lines',
+                name=f'Sharpe {window_months}M',
+                line=dict(color='#0066cc', width=2),
+                fill='tozeroy'
+            ))
+            
+            # Adicionar linha de referência em 0
+            fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+            
+            # Adicionar linha de referência em 1.0 (bom Sharpe)
+            fig.add_hline(y=1.0, line_dash="dot", line_color="green", opacity=0.3)
+            
+            fig.update_layout(
+                title=f"Sharpe Ratio Rolling ({window_months} meses)",
+                xaxis_title="Data",
+                yaxis_title="Sharpe Ratio",
+                hovermode='x unified',
+                template='plotly_white',
+                height=400
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Estatísticas do Sharpe rolling
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Sharpe Médio", f"{df_sharpe['sharpe'].mean():.2f}")
+            with col2:
+                st.metric("Sharpe Mínimo", f"{df_sharpe['sharpe'].min():.2f}")
+            with col3:
+                st.metric("Sharpe Máximo", f"{df_sharpe['sharpe'].max():.2f}")
+        
+    finally:
+        db.close()
+
+
 def display_positions(run_id):
     """Exibe tabela de posições do último rebalance."""
     db = SessionLocal()
@@ -662,6 +747,16 @@ def main():
             disabled=not use_smoothing
         )
         
+        st.subheader("📈 Regime de Mercado")
+        use_market_regime = st.checkbox(
+            "Filtro de Regime (MA200)?",
+            value=False,
+            help="Reduz exposição em mercado de baixa (preço < MA200)"
+        )
+        
+        if use_market_regime:
+            st.caption("Exposição: 100% (alta) / 50% (baixa)")
+        
         st.subheader("📝 Identificação")
         test_name = st.text_input(
             "Nome do Teste (opcional)",
@@ -735,7 +830,8 @@ def main():
             initial_capital=initial_capital,
             transaction_cost=transaction_cost,
             use_smoothing=use_smoothing,
-            alpha_smoothing=alpha_smoothing
+            alpha_smoothing=alpha_smoothing,
+            use_market_regime=use_market_regime
         )
         
         if run_id:
@@ -773,6 +869,8 @@ def main():
                 with col2:
                     display_turnover_chart(run_id)
                 
+                st.markdown("---")
+                display_rolling_sharpe(run_id, window_months=12)
                 st.markdown("---")
                 display_positions(run_id)
                 

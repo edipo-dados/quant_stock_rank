@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     winsorize_lower_pct: float = 0.05  # 5th percentile
     winsorize_upper_pct: float = 0.95  # 95th percentile
     
+    # Market Regime Filter Parameters
+    regime_ma_period: int = 200  # Moving average period for regime detection
+    regime_bullish_exposure: float = 1.0  # 100% exposure in bullish regime
+    regime_bearish_exposure: float = 0.5  # 50% exposure in bearish regime
+    
     # API Configuration
     api_host: str = "0.0.0.0"
     api_port: int = 8000
