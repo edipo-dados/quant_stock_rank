@@ -210,23 +210,23 @@ class BenchmarkManager:
         # Fazer cópia para não modificar o original
         prices_df = prices_df.copy()
         
-        # Resetar index para garantir estrutura limpa
+        # Resetar index
         prices_df = prices_df.reset_index(drop=True)
         
-        # Extrair apenas date e close como colunas simples
-        if 'date' in prices_df.columns and 'close' in prices_df.columns:
-            # Criar novo DataFrame com apenas as colunas necessárias
-            clean_df = pd.DataFrame({
-                'date': prices_df['date'].values,
-                'close': pd.to_numeric(prices_df['close'].values.flatten(), errors='coerce')
-            })
-            prices_df = clean_df
-        else:
-            raise ValueError("DataFrame must have 'date' and 'close' columns")
-        
-        # Calcular retornos diários
+        # Ordenar por data
         prices_df = prices_df.sort_values('date').reset_index(drop=True)
-        prices_df['daily_return'] = prices_df['close'].pct_change()
+        
+        # Calcular retornos diários - usar apply para garantir que funciona
+        closes = prices_df['close'].tolist()
+        returns = [None]  # Primeiro retorno é None
+        for i in range(1, len(closes)):
+            if closes[i-1] and closes[i-1] != 0:
+                ret = (closes[i] - closes[i-1]) / closes[i-1]
+                returns.append(ret)
+            else:
+                returns.append(None)
+        
+        prices_df['daily_return'] = returns
         
         records_inserted = 0
         
