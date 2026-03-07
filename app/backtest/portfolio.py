@@ -1,9 +1,16 @@
 """
 Gerenciamento de portfólio para backtest.
+
+Implementa:
+- Equal weight e score-weighted portfolios
+- Volatility targeting (v2.7.0)
+- Sector exposure limits (v2.7.0)
+- Risk-adjusted weighting
 """
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 import pandas as pd
+import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,17 +25,25 @@ class Portfolio:
     - Score weighted: Pesos proporcionais aos scores
     """
     
-    def __init__(self, tickers: List[str], scores: Dict[str, float] = None):
+    def __init__(
+        self,
+        tickers: List[str],
+        scores: Dict[str, float] = None,
+        sectors: Dict[str, str] = None
+    ):
         """
         Inicializa portfólio.
         
         Args:
             tickers: Lista de tickers no portfólio
             scores: Dicionário opcional {ticker: score} para ponderação
+            sectors: Dicionário opcional {ticker: sector} para limites setoriais
         """
         self.tickers = tickers
         self.scores = scores or {}
+        self.sectors = sectors or {}
         self.weights = {}
+        self.sector_exposures = {}  # Exposição por setor
     
     def calculate_equal_weights(self) -> Dict[str, float]:
         """
@@ -137,6 +152,230 @@ class Portfolio:
         logger.debug(f"Weights: {self.weights}")
         
         return self.weights
+    
+    def apply_volatility_targeting(
+        self,
+        weights: Dict[str, float],
+        volatilities: Dict[str, float],
+        returns_history: Dict[str, pd.Series],
+        target_vol: float = 0.15
+    ) -> Dict[str, float]:
+        """
+        Aplica volatility targeting ao portfólio.
+        
+        Ajusta exposição total para atingir volatilidade alvo.
+        
+        Args:
+            weights: Pesos atuais do portfólio {ticker: weight}
+            volatilities: Volatilidades individuais {ticker: vol_annual}
+            returns_history: Histórico de retornos {ticker: Series}
+            target_vol: Volatilidade alvo anualizada (ex: 0.15 = 15%)
+            
+        Returns:
+            Pesos ajustados {ticker: weight}
+        """
+        if not weights or not returns_history:
+            logger.warning("Cannot apply volatility targeting: missing data")
+            return weights
+        
+        try:
+            # Construir matriz de retornos
+            tickers_with_data = [t for t in weights.keys() if t in returns_history]
+            
+            if len(tickers_with_data) < 2:
+                logger.warning("Insufficient return history for volatility targeting")
+                return weights
+            
+            # Alinhar séries de retornos
+            returns_df = pd.DataFrame({
+                ticker: returns_history[ticker]
+                for ticker in tickers_with_data
+            }).dropna()
+            
+            if len(returns_df) < 20:  # Mínimo de 20 observações
+                logger.warning(f"Insufficient data points for vol targeting: {len(returns_df)}")
+                return weights
+            
+            # Calcular matriz de covariância anualizada
+            cov_matrix = returns_df.cov() * 252  # Anualizar (assumindo retornos diários)
+            
+            # Vetor de pesos
+            weight_vector = np.array([weights.get(t, 0.0) for t in tickers_with_data])
+            
+            # Calcular volatilidade do portfólio
+            portfolio_variance = np.dot(weight_vector, np.dot(cov_matrix, weight_vector))
+            portfolio_vol = np.sqrt(portfolio_variance)
+            
+            logger.info(f"Portfolio volatility (before targeting): {portfolio_vol*100:.2f}%")
+            
+            # Calcular fator de ajuste
+            if portfolio_vol > 0:
+                adjustment_factor = target_vol / portfolio_vol
+                
+                # Limitar ajuste para evitar alavancagem excessiva ou redução drástica
+                adjustment_factor = max(0.5, min(1.5, adjustment_factor))
+                
+                logger.info(f"Volatility adjustment factor: {adjustment_factor:.3f}")
+                
+                # Aplicar ajuste
+                adjusted_weights = {
+                    ticker: weight * adjustment_factor
+                    for ticker, weight in weights.items()
+                }
+                
+                # Renormalizar
+                total_weight = sum(adjusted_weights.values())
+                if total_weight > 0:
+                    adjusted_weights = {
+                        ticker: weight / total_weight
+                        for ticker, weight in adjusted_weights.items()
+                    }
+                
+                # Calcular volatilidade ajustada
+                adjusted_weight_vector = np.array([
+                    adjusted_weights.get(t, 0.0) for t in tickers_with_data
+                ])
+                adjusted_variance = np.dot(
+                    adjusted_weight_vector,
+                    np.dot(cov_matrix, adjusted_weight_vector)
+                )
+                adjusted_vol = np.sqrt(adjusted_variance)
+                
+                logger.info(f"Portfolio volatility (after targeting): {adjusted_vol*100:.2f}%")
+                
+                return adjusted_weights
+            else:
+                logger.warning("Portfolio volatility is zero, cannot apply targeting")
+                return weights
+                
+        except Exception as e:
+            logger.error(f"Error applying volatility targeting: {e}", exc_info=True)
+            return weights
+    
+    def apply_sector_limits(
+        self,
+        weights: Dict[str, float],
+        sectors: Dict[str, str],
+        max_sector_exposure: float = 0.30
+    ) -> Dict[str, float]:
+        """
+        Aplica limites de exposição por setor.
+        
+        Args:
+            weights: Pesos atuais {ticker: weight}
+            sectors: Mapeamento {ticker: sector}
+            max_sector_exposure: Exposição máxima por setor (ex: 0.30 = 30%)
+            
+        Returns:
+            Pesos ajustados {ticker: weight}
+        """
+        if not weights or not sectors:
+            logger.warning("Cannot apply sector limits: missing data")
+            return weights
+        
+        # Calcular exposição por setor
+        sector_exposures = {}
+        for ticker, weight in weights.items():
+            sector = sectors.get(ticker, 'Unknown')
+            sector_exposures[sector] = sector_exposures.get(sector, 0.0) + weight
+        
+        # Identificar setores que excedem o limite
+        violating_sectors = {
+            sector: exposure
+            for sector, exposure in sector_exposures.items()
+            if exposure > max_sector_exposure
+        }
+        
+        if not violating_sectors:
+            logger.info("All sectors within limits")
+            self.sector_exposures = sector_exposures
+            return weights
+        
+        logger.info(f"Sectors exceeding limit: {violating_sectors}")
+        
+        # Ajustar pesos dos setores que excedem
+        adjusted_weights = weights.copy()
+        
+        for sector, current_exposure in violating_sectors.items():
+            # Calcular fator de redução
+            reduction_factor = max_sector_exposure / current_exposure
+            
+            # Reduzir pesos dos ativos deste setor
+            sector_tickers = [
+                t for t, s in sectors.items()
+                if s == sector and t in adjusted_weights
+            ]
+            
+            excess_weight = 0.0
+            for ticker in sector_tickers:
+                old_weight = adjusted_weights[ticker]
+                new_weight = old_weight * reduction_factor
+                adjusted_weights[ticker] = new_weight
+                excess_weight += (old_weight - new_weight)
+            
+            logger.info(
+                f"Reduced {sector} exposure from {current_exposure*100:.1f}% "
+                f"to {max_sector_exposure*100:.1f}% (excess: {excess_weight*100:.2f}%)"
+            )
+        
+        # Redistribuir peso excedente para setores abaixo do limite
+        total_excess = sum(weights.values()) - sum(adjusted_weights.values())
+        
+        if total_excess > 0.001:  # Tolerância numérica
+            # Setores que podem receber peso adicional
+            eligible_sectors = {
+                sector: exposure
+                for sector, exposure in sector_exposures.items()
+                if sector not in violating_sectors and exposure < max_sector_exposure
+            }
+            
+            if eligible_sectors:
+                # Calcular capacidade de cada setor
+                sector_capacity = {
+                    sector: max_sector_exposure - exposure
+                    for sector, exposure in eligible_sectors.items()
+                }
+                
+                total_capacity = sum(sector_capacity.values())
+                
+                if total_capacity > 0:
+                    # Distribuir proporcionalmente à capacidade
+                    for ticker, weight in adjusted_weights.items():
+                        sector = sectors.get(ticker, 'Unknown')
+                        if sector in sector_capacity:
+                            capacity_share = sector_capacity[sector] / total_capacity
+                            additional_weight = total_excess * capacity_share
+                            
+                            # Distribuir dentro do setor proporcionalmente
+                            sector_tickers = [
+                                t for t, s in sectors.items()
+                                if s == sector and t in adjusted_weights
+                            ]
+                            sector_total = sum(adjusted_weights[t] for t in sector_tickers)
+                            
+                            if sector_total > 0:
+                                ticker_share = adjusted_weights[ticker] / sector_total
+                                adjusted_weights[ticker] += additional_weight * ticker_share
+        
+        # Renormalizar para garantir soma = 1
+        total_weight = sum(adjusted_weights.values())
+        if total_weight > 0:
+            adjusted_weights = {
+                ticker: weight / total_weight
+                for ticker, weight in adjusted_weights.items()
+            }
+        
+        # Recalcular exposições finais
+        final_exposures = {}
+        for ticker, weight in adjusted_weights.items():
+            sector = sectors.get(ticker, 'Unknown')
+            final_exposures[sector] = final_exposures.get(sector, 0.0) + weight
+        
+        self.sector_exposures = final_exposures
+        
+        logger.info(f"Final sector exposures: {final_exposures}")
+        
+        return adjusted_weights
     
     def calculate_portfolio_return(
         self,

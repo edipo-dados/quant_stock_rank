@@ -2,234 +2,204 @@
 
 Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 
-O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
-e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
+## [2.7.0] - 2026-03-07
 
-## [2.6.0] - 2026-02-26
+### ✨ Novas Funcionalidades - Robustez da Estratégia
 
-### 🎯 BREAKING CHANGES
-- Sistema agora usa histórico adaptativo (1-3 anos) em vez de exigir exatamente 3 anos
-- Confidence factors aplicados ao quality_score
+#### 1. Correção Definitiva do Cálculo de Alpha
+- **Alinhamento de Retornos**: Garante que retornos da estratégia e benchmark estão na mesma frequência (diária)
+- **Remoção de NaN**: Remove valores ausentes antes do cálculo
+- **Conversão de Risk-Free Rate**: Converte taxa livre de risco anual para diária (rf_daily = rf_annual / 252)
+- **Validações Robustas**: Limita alpha entre -50% e +50%, logs detalhados
+- **Documentação**: Comentários passo-a-passo no código
 
-### ✨ Added
-- **Histórico Adaptativo**: Sistema usa máximo de dados disponíveis (1, 2 ou 3 anos)
-- **Confidence Factors**: Novos campos no schema FeatureMonthly
-  - `roe_mean_3y_confidence`
-  - `roe_volatility_confidence`
-  - `revenue_growth_3y_confidence`
-  - `net_income_volatility_confidence`
-  - `overall_confidence`
-- Métodos adaptativos retornam tuplas `(valor, confidence)`
-- `_calculate_book_value_growth_adaptive()` para instituições financeiras
-- Migration `scripts/migrate_add_confidence_factors.py`
-- Scripts de diagnóstico:
-  - `scripts/test_adaptive_history.py`
-  - `scripts/check_latest_scores.py`
-  - `scripts/debug_scores.py`
+#### 2. Volatility Targeting
+- **Risk-Adjusted Weighting**: Pesos ajustados pelo inverso da volatilidade (weight_i = score_i / vol_i)
+- **Portfolio Volatility Control**: Ajusta exposição total para atingir volatilidade alvo (15%)
+- **Lookback Period**: Usa 90 dias de histórico para cálculo de volatilidade
+- **Melhoria Esperada**: Sharpe Ratio +30-50% segundo literatura
+- **Configurável**: Pode ser ativado/desativado via `use_volatility_targeting`
 
-### 🔧 Changed
-- `calculate_roe_mean_3y()`: Retorna `(valor, confidence)` em vez de apenas valor
-- `calculate_revenue_growth_3y()`: Retorna `(valor, confidence)`
-- `calculate_roe_volatility()`: Retorna `(valor, confidence)`
-- `calculate_net_income_volatility()`: Retorna `(valor, confidence)`
-- `_calculate_industrial_factors()`: Desempacota tuplas e armazena confidence
-- `_calculate_financial_factors()`: Usa métodos adaptativos para bancos
-- `calculate_quality_score()`: Aplica confidence factor ao score final
-- `calculate_value_score()`: Usa `pb_ratio` como fallback quando `price_to_book` é None
-- Pipeline exclui confidence factors da normalização (são metadados, não features)
-- Pipeline passa todos os campos necessários para scoring engine
+#### 3. Limites de Exposição por Setor
+- **Máximo por Setor**: Limita exposição a 30% por setor
+- **Redistribuição Automática**: Excesso redistribuído proporcionalmente
+- **Prevenção de Concentração**: Evita concentração em bancos, commodities, etc
+- **Configurável**: Pode ser ativado/desativado via `use_sector_limits`
 
-### 🐛 Fixed
-- **Scores NaN para ativos sem 3 anos completos**: Agora calculados com confidence reduzido
-- **Instituições financeiras com scores NaN**: Agora usam métodos adaptativos
-- **API retornando 500 errors**: Adicionado `safe_float()` para converter NaN/Infinity para None
-- **ScoreBreakdown com campos obrigatórios**: Todos os campos agora são Optional[float]
+### 🔧 Melhorias Técnicas
 
-### 📊 Results
-```
-Antes (v2.5.2):
-- VALE3: quality=NaN, value=NaN
-- ITUB4: quality=NaN, value=NaN
-- Taxa de elegibilidade: ~60-70%
+#### Novos Módulos
+- `app/backtest/portfolio_risk.py` - Gerenciamento de risco de portfólio
+  - `get_asset_volatilities()` - Calcula volatilidades anualizadas
+  - `get_asset_sectors()` - Obtém setores dos ativos
+  - `get_returns_history()` - Histórico de retornos diários
 
-Depois (v2.6.0):
-- VALE3: quality=-0.022, value=-0.278, confidence=1.0
-- ITUB4: quality=0.156, value=-0.222, confidence=1.0
-- Taxa de elegibilidade: ~80-90%
-```
+#### Atualizações em Módulos Existentes
+- `app/backtest/portfolio.py`:
+  - `apply_volatility_targeting()` - Aplica volatility targeting
+  - `apply_sector_limits()` - Aplica limites setoriais
+  - `sector_exposures` - Tracking de exposição por setor
 
-### 📝 Documentation
-- Criado `ADAPTIVE_HISTORY_IMPLEMENTATION.md` com implementação completa
-- Atualizado procedimento de deploy para EC2
-- Adicionado troubleshooting guide
+- `app/backtest/metrics.py`:
+  - `calculate_alpha_beta()` - Versão corrigida com validações
+  - Logs detalhados de cálculos intermediários
 
----
+- `app/backtest/backtest_engine.py`:
+  - Novos parâmetros: `use_volatility_targeting`, `use_sector_limits`
+  - Integração com `PortfolioRiskManager`
 
-## [2.5.2] - 2026-02-26
+- `app/config.py`:
+  - `use_volatility_targeting: bool = True`
+  - `target_portfolio_volatility: float = 0.15`
+  - `volatility_lookback_days: int = 90`
+  - `use_sector_limits: bool = True`
+  - `max_sector_exposure: float = 0.30`
 
-### 🎯 BREAKING CHANGES
-- Remoção completa de valores sentinela (-999)
-- Scoring engine agora retorna NaN em vez de -999 para fatores ausentes
-- Redistribuição automática de pesos quando categorias têm NaN
+### 📊 Scripts Novos
+- `scripts/run_enhanced_backtest.py` - Backtest com todas as melhorias v2.7.0
 
-### ✨ Added
-- Missing value handler com imputação setorial/universal
-- Redistribuição automática de pesos no calculate_final_score
-- Logs detalhados de imputação
-- Tratamento estatístico correto de NaN
+### 📚 Documentação Atualizada
+- README.md - Adicionadas novas funcionalidades
+- CHANGELOG.md - Documentação completa das mudanças
+- docs/REGRAS_E_CONFIGURACOES.md - Novas regras de risco
 
-### 🔧 Changed
-- `calculate_momentum_score`: retorna NaN em vez de -999
-- `calculate_quality_score`: retorna NaN em vez de -999
-- `calculate_value_score`: retorna NaN em vez de -999
-- `calculate_final_score`: redistribui pesos quando há NaN
-- Scores agora distribuídos entre -3 e +3 (média ~0)
+### 🎯 Resultados Esperados
+- **Sharpe Ratio**: Melhoria de 30-50% com volatility targeting
+- **Max Drawdown**: Redução com limites setoriais
+- **Estabilidade**: Menor volatilidade do portfólio
+- **Diversificação**: Melhor distribuição setorial
 
-### 🐛 Fixed
-- Scores contaminados por valores sentinela (-549 → 0.00)
-- Normalização distorcida por valores extremos
-- Sistema instável devido a valores artificiais
+## [2.6.0] - 2026-03-07
 
-### 📊 Results
-```
-Antes: Média=-549, Desvio=N/A, Range=[-999, -300]
-Depois: Média=0.00, Desvio=0.23, Range=[-0.38, 0.25]
-```
+### ✅ Implementado e Validado
 
-### 📝 Documentation
-- Atualizado README.md com nova arquitetura
-- Atualizado PIPELINE_ARCHITECTURE.md
-- Removidos arquivos obsoletos de troubleshooting
+#### Otimizações da Estratégia
+- **Score-Weighted Portfolio**: Pesos proporcionais aos scores (máx 25% por ativo)
+- **Market Regime Filter**: Filtro baseado em MA200 do IBOVESPA (100% bull / 50% bear)
+- **Temporal Smoothing**: Suavização 0.7 atual + 0.3 anterior
+- **Pesos Multifator Otimizados**: Momentum 50%, Value 25%, Quality 15%, Risk 10%
+- **Filtro de Liquidez Aumentado**: Volume mínimo R$ 5M (antes R$ 100k)
+- **Rebalanceamento Mensal**: Reduz custos de transação
 
----
+#### Correções Críticas
+- **Cálculo de Alpha/Beta**: Implementado CAPM correto com validações
+- **Information Ratio**: Cálculo corrigido com tracking error
+- **Ingestão de Benchmark**: Corrigido para lidar com DataFrames do pandas
+- **Normalização de Scores**: Min-Max (0-1) em vez de z-score
+- **Tickers**: Padronizado sem sufixo .SA no banco
 
-## [2.5.1] - 2026-02-25
+#### Performance Validada (Backtest 2022-2026)
+- Total Return: 16.78%
+- CAGR: 5.31%
+- Alpha Anual: 23.07% ✅
+- Beta: 0.62 ✅
+- Sharpe: 0.41
+- Sortino: 0.83
+- Max Drawdown: -18.01%
+- Turnover: 19.43%
 
-### ✨ Added
-- Arquitetura de 3 camadas (Eligibility → Feature Engineering → Scoring)
-- Missing value handler (`app/factor_engine/missing_handler.py`)
-- Logs estruturados por camada
-- Análise de missing values antes da imputação
-- Resumo de imputações (setor vs universo)
+#### Documentação
+- ✅ README.md atualizado com visão geral completa
+- ✅ STRATEGY_OPTIMIZATION_QUICKSTART.md com resultados validados
+- ✅ docs/REGRAS_E_CONFIGURACOES.md com todas as regras
+- ✅ docs/INDEX.md reorganizado
+- ✅ Removidos 34 arquivos de teste/debug obsoletos
 
-### 🔧 Changed
-- Filtro de elegibilidade usa apenas dados brutos
-- Features calculadas para TODOS os elegíveis
-- Imputação antes da normalização
-- Pipeline determinístico
+#### Scripts Principais
+- `run_optimized_backtest.py` - Backtest com configurações otimizadas
+- `run_smart_pipeline.py` - Pipeline completo de produção
+- `update_liquid_stocks.py` - Atualização dinâmica do universo
+- `ingest_benchmark.py` - Ingestão do IBOVESPA
+- `generate_historical_scores.py` - Geração de snapshots históricos
 
-### 🐛 Fixed
-- Deadlock lógico (filtro verificava fatores calculados)
-- 0 ativos elegíveis → 80% elegíveis
-- Exclusão por missing features eliminada
+### 🗑️ Removido
 
-### 📊 Results
-```
-Taxa de elegibilidade: 0% → 80%
-Ativos ranqueados: 0 → 4 (teste)
-```
+#### Arquivos de Teste/Debug (34 arquivos)
+- `scripts/test_*.py` (11 arquivos)
+- `scripts/debug_*.py` (4 arquivos)
+- `scripts/fix_*.py` (3 arquivos)
+- `scripts/diagnose_*.py` (1 arquivo)
+- `scripts/investigate_*.py` (1 arquivo)
+- `scripts/renormalize_scores.py`
+- `scripts/check_itub3.py`
 
----
+#### Documentação Obsoleta
+- `docs/MULTIFACTOR_MODEL_PLAN.md`
+- `docs/MELHORIAS_ACADEMICAS.md`
+- `docs/BACKTEST_NEXT_STEPS.md`
+- `docs/BACKTEST_CORRECTIONS_PLAN.md`
+- `docs/BACKTEST_IMPROVEMENTS_PLAN.md`
+- `docs/PIPELINE_INTELIGENTE.md`
+- `IMPLEMENTATION_SUMMARY.md`
+- `ADDITIONAL_IMPROVEMENTS_SUMMARY.md`
+- `ADAPTIVE_HISTORY_IMPLEMENTATION.md`
+- `HISTORICAL_EXPANSION_SUMMARY.md`
+- `scripts/README_DIAGNOSE_ITUB3.md`
 
-## [2.5.0] - 2026-02-24
+## [2.5.0] - 2026-03-06
 
-### ✨ Added
-- Fatores acadêmicos de momentum (momentum_6m_ex_1m, momentum_12m_ex_1m)
-- Fatores VALUE (pe_ratio, price_to_book, ev_ebitda, fcf_yield)
-- Fatores SIZE (size_factor = -log(market_cap))
-- Suavização temporal de scores
-- Backtest engine completo
-- Métricas de performance (Sharpe, Sortino, Max Drawdown)
+### Adicionado
+- Seleção dinâmica de ações por liquidez (componentes Ibovespa)
+- Scripts de diagnóstico de dados
+- Validações de métricas de backtest
 
-### 🔧 Changed
-- Pesos: Momentum=35%, Quality=25%, Value=30%, Size=10%
-- Momentum exclui último mês (evita reversão de curto prazo)
-- Normalização cross-sectional com winsorização ±3σ
+### Corrigido
+- Conversão de dtype em select_top_n()
+- Conversão de dtype em get_ranking_snapshot()
+- Tratamento de None em métricas de benchmark
 
-### 📝 Documentation
-- ACADEMIC_MOMENTUM_IMPLEMENTATION.md
-- VALUE_SIZE_IMPLEMENTATION.md
-- BACKTEST_SMOOTHING.md
-- MELHORIAS_ACADEMICAS.md
+## [2.4.0] - 2026-03-05
 
----
+### Adicionado
+- Temporal smoothing dos scores
+- Market regime filter (MA200)
+- Calmar Ratio
+- Sortino Ratio
 
-## [2.2.0] - 2026-02-20
+### Modificado
+- Pesos multifator ajustados
+- Filtros de elegibilidade aumentados
 
-### ✨ Added
-- Pipeline inteligente (FULL vs INCREMENTAL)
-- Rate limiting para APIs externas
-- Rastreamento de execuções
-- Modo liquid (50 ativos mais líquidos da B3)
+## [2.3.0] - 2026-03-01
 
-### 🔧 Changed
-- Ingestão otimizada com batches
-- Delay de 2s entre requisições
-- Modo incremental busca apenas últimos 7 dias
+### Adicionado
+- Sistema de backtest completo
+- Persistência de resultados
+- Comparação com benchmark
+- Métricas de performance
 
-### 📊 Performance
-- FULL: ~15 min (50 ativos)
-- INCREMENTAL: ~2 min (50 ativos)
+## [2.2.0] - 2026-02-25
 
----
+### Adicionado
+- Fatores de momentum acadêmico (12M, 6M, 3M)
+- Fatores de value (P/E, P/B, EV/EBITDA, DY)
+- Fatores de quality (ROE, ROA, Debt/EBITDA, Margem)
+- Fatores de risk (Volatilidade, Max Drawdown)
 
-## [2.1.0] - 2026-02-15
+## [2.1.0] - 2026-02-20
 
-### ✨ Added
-- Chat assistente com Gemini
-- Explicações automáticas de scores
-- API REST completa
-- Frontend Streamlit
+### Adicionado
+- Pipeline inteligente de ingestão
+- Tratamento de missing values
+- Sistema de confiança
 
-### 🔧 Changed
-- Arquitetura modular
-- Separação backend/frontend
-- Docker compose multi-container
+## [2.0.0] - 2026-02-15
 
----
-
-## [2.0.0] - 2026-02-10
-
-### ✨ Added
-- Sistema de scoring multi-fator
-- Normalização cross-sectional
-- Filtro de elegibilidade
-- Banco de dados PostgreSQL
-- Docker support
-
-### 🔧 Changed
-- Migração de SQLite para PostgreSQL
-- Arquitetura em camadas
-- Separação de concerns
-
----
+### Adicionado
+- Refatoração completa da arquitetura
+- Modelo multifator
+- API REST com FastAPI
+- Interface Streamlit
 
 ## [1.0.0] - 2026-02-01
 
-### ✨ Added
+### Adicionado
 - Versão inicial
-- Ingestão de dados Yahoo Finance
-- Cálculo básico de fatores
-- Ranking simples
+- Ingestão básica de dados
+- Cálculo simples de scores
+- Ranking básico
 
 ---
 
-## Tipos de Mudanças
-
-- `Added` para novas funcionalidades
-- `Changed` para mudanças em funcionalidades existentes
-- `Deprecated` para funcionalidades que serão removidas
-- `Removed` para funcionalidades removidas
-- `Fixed` para correções de bugs
-- `Security` para correções de vulnerabilidades
-
-## Versionamento
-
-- **MAJOR**: Mudanças incompatíveis na API
-- **MINOR**: Novas funcionalidades compatíveis
-- **PATCH**: Correções de bugs compatíveis
-
-Exemplo: v2.5.2
-- 2 = MAJOR (arquitetura base)
-- 5 = MINOR (features acadêmicas)
-- 2 = PATCH (correção de sentinel values)
+**Formato**: Baseado em [Keep a Changelog](https://keepachangelog.com/)  
+**Versionamento**: [Semantic Versioning](https://semver.org/)

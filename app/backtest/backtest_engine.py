@@ -56,7 +56,12 @@ class BacktestEngine:
         use_market_regime: bool = False,
         regime_ma_period: int = 200,
         regime_bullish_exposure: float = 1.0,
-        regime_bearish_exposure: float = 0.5
+        regime_bearish_exposure: float = 0.5,
+        use_volatility_targeting: bool = False,
+        target_portfolio_volatility: float = 0.15,
+        volatility_lookback_days: int = 90,
+        use_sector_limits: bool = False,
+        max_sector_exposure: float = 0.30
     ):
         """
         Inicializa engine de backtest.
@@ -74,6 +79,11 @@ class BacktestEngine:
             regime_ma_period: Período da média móvel para regime (padrão: 200)
             regime_bullish_exposure: Exposição em mercado de alta (padrão: 1.0)
             regime_bearish_exposure: Exposição em mercado de baixa (padrão: 0.5)
+            use_volatility_targeting: Se aplica volatility targeting (v2.7.0)
+            target_portfolio_volatility: Volatilidade alvo anualizada (padrão: 0.15 = 15%)
+            volatility_lookback_days: Dias para cálculo de volatilidade (padrão: 90)
+            use_sector_limits: Se aplica limites setoriais (v2.7.0)
+            max_sector_exposure: Exposição máxima por setor (padrão: 0.30 = 30%)
         """
         self.start_date = start_date
         self.end_date = end_date
@@ -88,12 +98,20 @@ class BacktestEngine:
         self.regime_bullish_exposure = regime_bullish_exposure
         self.regime_bearish_exposure = regime_bearish_exposure
         
+        # Novos parâmetros v2.7.0
+        self.use_volatility_targeting = use_volatility_targeting
+        self.target_portfolio_volatility = target_portfolio_volatility
+        self.volatility_lookback_days = volatility_lookback_days
+        self.use_sector_limits = use_sector_limits
+        self.max_sector_exposure = max_sector_exposure
+        
         self.yahoo_client = YahooFinanceClient()
         
         logger.info(
             f"BacktestEngine initialized: {start_date} to {end_date}, "
             f"top_n={top_n}, weight={weight_method}, smoothing={use_smoothing}, "
-            f"benchmark={benchmark_symbol}, market_regime={use_market_regime}"
+            f"benchmark={benchmark_symbol}, market_regime={use_market_regime}, "
+            f"vol_targeting={use_volatility_targeting}, sector_limits={use_sector_limits}"
         )
     
     def get_monthly_dates(self) -> List[date]:
@@ -271,6 +289,147 @@ class BacktestEngine:
                 returns[ticker] = 0.0
         
         return returns
+    def get_asset_volatilities(
+        self,
+        tickers: List[str],
+        reference_date: date,
+        lookback_days: int = 90
+    ) -> Dict[str, float]:
+        """
+        Calcula volatilidades anualizadas dos ativos.
+
+        Args:
+            tickers: Lista de tickers
+            reference_date: Data de referência
+            lookback_days: Dias para trás para calcular volatilidade
+
+        Returns:
+            Dicionário {ticker: volatility_annual}
+        """
+        from datetime import timedelta
+
+        volatilities = {}
+        start_date = reference_date - timedelta(days=lookback_days + 30)  # Buffer
+
+        for ticker in tickers:
+            try:
+                # Buscar preços históricos
+                prices_df = self.yahoo_client.fetch_daily_prices(
+                    ticker,
+                    start_date,
+                    reference_date
+                )
+
+                if prices_df.empty or len(prices_df) < 20:
+                    logger.warning(f"Insufficient data for volatility calc: {ticker}")
+                    volatilities[ticker] = 0.20  # Default 20%
+                    continue
+
+                # Calcular retornos diários
+                prices_df['returns'] = prices_df['close'].pct_change()
+
+                # Pegar últimos lookback_days
+                recent_returns = prices_df['returns'].dropna().tail(lookback_days)
+
+                if len(recent_returns) < 20:
+                    volatilities[ticker] = 0.20  # Default
+                    continue
+
+                # Calcular volatilidade anualizada
+                daily_vol = recent_returns.std()
+                annual_vol = daily_vol * np.sqrt(252)
+
+                volatilities[ticker] = annual_vol
+
+            except Exception as e:
+                logger.error(f"Error calculating volatility for {ticker}: {e}")
+                volatilities[ticker] = 0.20  # Default
+
+        return volatilities
+
+    def get_asset_sectors(
+        self,
+        tickers: List[str],
+        db: Session
+    ) -> Dict[str, str]:
+        """
+        Obtém setores dos ativos.
+
+        Args:
+            tickers: Lista de tickers
+            db: Sessão do banco
+
+        Returns:
+            Dicionário {ticker: sector}
+        """
+        from app.models.schemas import AssetInfo
+
+        sectors = {}
+
+        for ticker in tickers:
+            try:
+                asset_info = db.query(AssetInfo).filter(
+                    AssetInfo.ticker == ticker
+                ).first()
+
+                if asset_info and asset_info.sector:
+                    sectors[ticker] = asset_info.sector
+                else:
+                    sectors[ticker] = 'Unknown'
+
+            except Exception as e:
+                logger.error(f"Error getting sector for {ticker}: {e}")
+                sectors[ticker] = 'Unknown'
+
+        return sectors
+
+    def get_returns_history(
+        self,
+        tickers: List[str],
+        reference_date: date,
+        lookback_days: int = 90
+    ) -> Dict[str, pd.Series]:
+        """
+        Obtém histórico de retornos diários dos ativos.
+
+        Args:
+            tickers: Lista de tickers
+            reference_date: Data de referência
+            lookback_days: Dias para trás
+
+        Returns:
+            Dicionário {ticker: Series de retornos}
+        """
+        from datetime import timedelta
+
+        returns_history = {}
+        start_date = reference_date - timedelta(days=lookback_days + 30)
+
+        for ticker in tickers:
+            try:
+                prices_df = self.yahoo_client.fetch_daily_prices(
+                    ticker,
+                    start_date,
+                    reference_date
+                )
+
+                if prices_df.empty:
+                    continue
+
+                # Calcular retornos diários
+                prices_df['returns'] = prices_df['close'].pct_change()
+
+                # Pegar últimos lookback_days
+                recent_returns = prices_df['returns'].dropna().tail(lookback_days)
+
+                if len(recent_returns) >= 20:
+                    returns_history[ticker] = recent_returns
+
+            except Exception as e:
+                logger.error(f"Error getting returns history for {ticker}: {e}")
+
+        return returns_history
+
     
     def run_backtest(self, db: Session = None) -> Dict:
         """

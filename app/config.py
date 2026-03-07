@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     regime_bullish_exposure: float = 1.0  # 100% exposure in bullish regime
     regime_bearish_exposure: float = 0.5  # 50% exposure in bearish regime
     
+    # Portfolio Risk Management (v2.7.0)
+    use_volatility_targeting: bool = True  # Enable volatility targeting
+    target_portfolio_volatility: float = 0.15  # 15% target annual volatility
+    volatility_lookback_days: int = 90  # Days for volatility calculation
+    use_sector_limits: bool = True  # Enable sector exposure limits
+    max_sector_exposure: float = 0.30  # 30% maximum per sector
+    max_single_asset_weight: float = 0.25  # 25% maximum per asset
+    
     # API Configuration
     api_host: str = "0.0.0.0"
     api_port: int = 8000

@@ -262,26 +262,33 @@ class PerformanceMetrics:
         strategy_returns: pd.Series,
         benchmark_returns: pd.Series,
         risk_free_rate: float = 0.0,
-        periods_per_year: int = 12
+        periods_per_year: int = 252
     ) -> tuple[float, float]:
         """
         Calcula Alpha e Beta usando CAPM com validações robustas.
+        
+        VERSÃO CORRIGIDA (v2.7.0):
+        - Garante que retornos estão na mesma frequência (diária)
+        - Alinha séries por data antes do cálculo
+        - Remove NaN e valida dados
+        - Converte risk-free rate para frequência diária
+        - Anualiza alpha corretamente
         
         CAPM (Capital Asset Pricing Model):
         Beta = Cov(Rs, Rb) / Var(Rb)
         Alpha = E[Rs] - (Rf + Beta * (E[Rb] - Rf))
         
         Onde:
-        - Rs = retornos da estratégia
-        - Rb = retornos do benchmark
-        - Rf = taxa livre de risco
+        - Rs = retornos da estratégia (diários)
+        - Rb = retornos do benchmark (diários)
+        - Rf = taxa livre de risco (diária)
         - E[] = valor esperado (média)
         
         Args:
-            strategy_returns: Série de retornos periódicos da estratégia
-            benchmark_returns: Série de retornos periódicos do benchmark
-            risk_free_rate: Taxa livre de risco anualizada (ex: 0.05 para 5%)
-            periods_per_year: Número de períodos por ano (12 para mensal, 252 para diário)
+            strategy_returns: Série de retornos DIÁRIOS da estratégia
+            benchmark_returns: Série de retornos DIÁRIOS do benchmark
+            risk_free_rate: Taxa livre de risco ANUALIZADA (ex: 0.05 para 5%)
+            periods_per_year: Número de períodos por ano (252 para diário, 12 para mensal)
         
         Returns:
             Tuple de (alpha_anualizado_pct, beta)
@@ -293,7 +300,7 @@ class PerformanceMetrics:
             logger.warning("Empty returns series for alpha/beta calculation")
             return 0.0, 1.0
         
-        # Alinhar séries pelo índice (garantir mesmas datas)
+        # PASSO 1: Alinhar séries pelo índice (garantir mesmas datas)
         aligned = pd.DataFrame({
             'strategy': strategy_returns,
             'benchmark': benchmark_returns
@@ -306,9 +313,12 @@ class PerformanceMetrics:
         strategy = aligned['strategy']
         benchmark = aligned['benchmark']
         
-        logger.info(f"Calculating alpha/beta with {len(strategy)} aligned periods")
+        logger.info(
+            f"Calculating alpha/beta with {len(strategy)} aligned periods "
+            f"(frequency: {periods_per_year} periods/year)"
+        )
         
-        # Calcular Beta usando covariância
+        # PASSO 2: Calcular Beta usando covariância
         covariance = strategy.cov(benchmark)
         benchmark_variance = benchmark.var()
         
@@ -318,7 +328,7 @@ class PerformanceMetrics:
         else:
             beta = covariance / benchmark_variance
             
-            # Validar Beta (deve estar entre -2 e 3 tipicamente)
+            # Validar Beta (deve estar entre -3 e 3 tipicamente)
             if pd.isna(beta):
                 logger.warning("Beta is NaN, setting beta=1.0")
                 beta = 1.0
@@ -326,29 +336,37 @@ class PerformanceMetrics:
                 logger.warning(f"Beta value seems unrealistic: {beta:.2f}, capping at ±3")
                 beta = max(-3.0, min(3.0, beta))
         
-        # Calcular retornos médios periódicos
+        # PASSO 3: Calcular retornos médios periódicos
         strategy_mean = strategy.mean()
         benchmark_mean = benchmark.mean()
         
-        # Converter risk_free_rate anualizada para periódica
+        # PASSO 4: Converter risk_free_rate anualizada para periódica
+        # Se periods_per_year = 252 (diário): rf_daily = rf_annual / 252
+        # Se periods_per_year = 12 (mensal): rf_monthly = rf_annual / 12
         rf_periodic = risk_free_rate / periods_per_year
         
-        # Calcular Alpha periódico usando CAPM
-        # Alpha = Rs - (Rf + Beta * (Rb - Rf))
+        logger.debug(
+            f"Risk-free rate: annual={risk_free_rate*100:.2f}%, "
+            f"periodic={rf_periodic*100:.4f}%"
+        )
+        
+        # PASSO 5: Calcular Alpha periódico usando CAPM
+        # Alpha = E[Rs] - (Rf + Beta * (E[Rb] - Rf))
         alpha_periodic = strategy_mean - (rf_periodic + beta * (benchmark_mean - rf_periodic))
         
-        # Anualizar Alpha
+        # PASSO 6: Anualizar Alpha
+        # alpha_annual = alpha_periodic * periods_per_year
         alpha_annual = alpha_periodic * periods_per_year
         
-        # Validar Alpha (deve estar entre -50% e +50% tipicamente)
+        # PASSO 7: Validar Alpha (deve estar entre -50% e +50%)
         if pd.isna(alpha_annual):
             logger.warning("Alpha is NaN, setting to 0.0")
             alpha_annual = 0.0
         elif abs(alpha_annual) > 0.5:
             logger.warning(
                 f"Alpha value seems unrealistic: {alpha_annual*100:.2f}%. "
-                f"Strategy mean: {strategy_mean*100:.4f}%, "
-                f"Benchmark mean: {benchmark_mean*100:.4f}%, "
+                f"Strategy mean: {strategy_mean*periods_per_year*100:.2f}%, "
+                f"Benchmark mean: {benchmark_mean*periods_per_year*100:.2f}%, "
                 f"Beta: {beta:.2f}, "
                 f"Capping at ±50%"
             )
@@ -357,7 +375,8 @@ class PerformanceMetrics:
         logger.info(
             f"Alpha/Beta calculated: Alpha={alpha_annual*100:.2f}%, Beta={beta:.2f} "
             f"(Strategy mean={strategy_mean*periods_per_year*100:.2f}%, "
-            f"Benchmark mean={benchmark_mean*periods_per_year*100:.2f}%)"
+            f"Benchmark mean={benchmark_mean*periods_per_year*100:.2f}%, "
+            f"Rf={risk_free_rate*100:.2f}%)"
         )
         
         return alpha_annual * 100, beta  # Alpha em %

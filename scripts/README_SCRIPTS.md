@@ -1,305 +1,476 @@
 # Scripts do Quant Stock Ranker
 
-Este diretório contém scripts utilitários para manutenção e operação do sistema.
+Documentação completa de todos os scripts disponíveis no sistema.
 
-## 🚀 Scripts Principais
+## 🚀 Scripts Principais (Produção)
 
-### Pipeline
+### Pipeline Completo
 
-#### `run_pipeline_docker.py`
-Executa o pipeline principal de ingestão, cálculo de features e scoring.
-
-```bash
-# Modo teste (5 ativos)
-python scripts/run_pipeline_docker.py --mode test
-
-# Modo produção (50 ativos mais líquidos)
-python scripts/run_pipeline_docker.py --mode liquid --limit 50
-
-# Forçar execução FULL (buscar histórico completo)
-python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full
-```
-
-#### `clear_and_run_full.py` ⚠️
-Limpa TODOS os dados do banco e roda pipeline FULL do zero.
-
-**ATENÇÃO**: Esta operação é DESTRUTIVA! Faça backup antes!
+#### `run_smart_pipeline.py`
+**Uso**: Pipeline completo de ingestão e cálculo de scores
 
 ```bash
-# Limpar e rodar com 10 ativos
-python scripts/clear_and_run_full.py --mode liquid --limit 10
+# EC2
+docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py
 
-# Limpar e rodar com 50 ativos (produção)
-python scripts/clear_and_run_full.py --mode liquid --limit 50
-
-# Apenas limpar dados (sem rodar pipeline)
-python scripts/clear_and_run_full.py --clear-only
-
-# Sem confirmação (use com cuidado!)
-python scripts/clear_and_run_full.py --mode liquid --limit 50 --no-confirm
+# Local
+python scripts/run_smart_pipeline.py
 ```
 
-#### `clear_and_run_full.sh`
-Versão bash do script acima.
+**O que faz**:
+1. Atualiza lista de ações líquidas
+2. Ingere preços diários (últimos 30 dias)
+3. Ingere fundamentalistas (FMP API)
+4. Calcula fatores quantitativos
+5. Gera ranking atual
+6. Salva no banco de dados
+
+**Quando usar**: Atualização diária (cron 19h)
+
+---
+
+### Backtest
+
+#### `run_optimized_backtest.py`
+**Uso**: Executa backtest com configurações otimizadas
 
 ```bash
-./scripts/clear_and_run_full.sh liquid 50
+docker exec -it quant-ranker-backend python scripts/run_optimized_backtest.py
 ```
 
-### Verificação e Diagnóstico
+**Configurações**:
+- Score-weighted portfolio (máx 25% por ativo)
+- Market regime filter (MA200)
+- Temporal smoothing (0.7 + 0.3)
+- Rebalanceamento mensal
+- Top 10 ações
 
-#### `check_latest_scores.py`
-Verifica os scores mais recentes calculados.
+**Saída**: Métricas de performance completas
+
+#### `run_backtest_pipeline.py`
+**Uso**: Pipeline de backtest com opções avançadas
 
 ```bash
-python scripts/check_latest_scores.py
+docker exec -it quant-ranker-backend python scripts/run_backtest_pipeline.py \
+  --start 2022-01-01 \
+  --end 2026-03-01 \
+  --generate-scores \
+  --configs full
 ```
 
-#### `check_data_dates.py`
-Verifica as datas dos dados no banco.
+**Opções**:
+- `--start`: Data inicial
+- `--end`: Data final
+- `--generate-scores`: Gerar snapshots históricos
+- `--force-scores`: Forçar recálculo
+- `--clear-old`: Limpar dados antigos
+- `--configs`: Configurações (default, full, quick)
+
+#### `compare_strategies.py`
+**Uso**: Compara diferentes estratégias
 
 ```bash
-python scripts/check_data_dates.py
+docker exec -it quant-ranker-backend python scripts/compare_strategies.py
 ```
 
-#### `check_confidence_factors.py`
-Verifica os confidence factors (v2.6.0).
+**Compara**:
+- Equal weight vs Score-weighted
+- Com/sem market regime filter
+- Com/sem temporal smoothing
+
+---
+
+### Ingestão de Dados
+
+#### `ingest_benchmark.py`
+**Uso**: Ingere dados do IBOVESPA (benchmark)
 
 ```bash
-python scripts/check_confidence_factors.py
+docker exec -it quant-ranker-backend python scripts/ingest_benchmark.py
 ```
 
-#### `check_pipeline_history.py`
-Mostra histórico de execuções do pipeline.
+**Período**: Últimos 3 anos (ajustável)
+
+**Necessário para**: Cálculo de Alpha, Beta, Information Ratio
+
+#### `ingest_full_history.py`
+**Uso**: Ingere histórico completo de preços
 
 ```bash
-python scripts/check_pipeline_history.py
+docker exec -it quant-ranker-backend python scripts/ingest_full_history.py \
+  --start 2020-01-01 \
+  --end 2026-03-01
 ```
 
-#### `validate_features.py`
-Valida features calculadas.
+**Quando usar**: Setup inicial ou expansão histórica
+
+#### `ingest_prices_sequential.py`
+**Uso**: Ingere preços sequencialmente (evita rate limits)
 
 ```bash
-python scripts/validate_features.py
+docker exec -it quant-ranker-backend python scripts/ingest_prices_sequential.py \
+  --start 2022-01-01 \
+  --end 2026-03-01 \
+  --delay 2
 ```
 
-### Migrations
+**Opções**:
+- `--delay`: Segundos entre requests (padrão: 1)
 
-#### `migrate_add_confidence_factors.py`
-Adiciona colunas de confidence factors (v2.6.0).
+---
+
+### Geração de Snapshots
+
+#### `generate_historical_scores.py`
+**Uso**: Gera snapshots históricos de ranking
 
 ```bash
-python scripts/migrate_add_confidence_factors.py
+docker exec -it quant-ranker-backend python scripts/generate_historical_scores.py \
+  --start 2022-01-01 \
+  --end 2026-03-01 \
+  --frequency monthly
 ```
 
-#### `migrate_add_backtest_smoothing.py`
-Adiciona colunas para backtest e smoothing.
+**Opções**:
+- `--frequency`: daily, weekly, monthly (padrão: monthly)
+
+**Necessário para**: Backtest funcionar
+
+#### `calculate_historical_scores.py`
+**Uso**: Calcula scores para datas específicas
 
 ```bash
-python scripts/migrate_add_backtest_smoothing.py
+docker exec -it quant-ranker-backend python scripts/calculate_historical_scores.py \
+  --date 2025-01-01
 ```
 
-### Testes
+---
 
-#### `test_adaptive_history.py`
-Testa implementação de histórico adaptativo.
+### Atualização de Dados
+
+#### `update_liquid_stocks.py`
+**Uso**: Atualiza lista de ações líquidas
 
 ```bash
-python scripts/test_adaptive_history.py
+docker exec -it quant-ranker-backend python scripts/update_liquid_stocks.py
 ```
 
-#### `test_missing_treatment.py`
-Testa tratamento de missing values.
+**O que faz**:
+1. Busca componentes do Ibovespa (yfinance)
+2. Adiciona ações da lista B3
+3. Garante ITUB3 está incluído
+4. Atualiza tabela AssetInfo
 
-```bash
-python scripts/test_missing_treatment.py
-```
-
-#### `test_quality_score.py`
-Testa cálculo de quality score.
-
-```bash
-python scripts/test_quality_score.py
-```
-
-### Suavização Temporal
-
-#### `apply_temporal_smoothing.py`
-Aplica suavização exponencial aos scores para reduzir turnover do portfólio.
-
-**Fórmula**: `final_score_smoothed = 0.7 * score_atual + 0.3 * score_anterior`
-
-```bash
-# Aplicar suavização à data de hoje
-python scripts/apply_temporal_smoothing.py
-
-# Aplicar a uma data específica
-python scripts/apply_temporal_smoothing.py --date 2026-02-26
-
-# Aplicar a TODAS as datas com scores
-python scripts/apply_temporal_smoothing.py --all
-
-# Customizar alpha (peso do score atual)
-python scripts/apply_temporal_smoothing.py --alpha 0.8
-
-# Customizar lookback (dias para buscar score anterior)
-python scripts/apply_temporal_smoothing.py --lookback-days 60
-
-# Docker - Aplicar a todas as datas
-docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
-```
-
-**Parâmetros**:
-- `--date`: Data específica (YYYY-MM-DD). Default: hoje
-- `--alpha`: Peso do score atual (0-1). Default: 0.7
-  - 0.5 = peso igual (50% atual, 50% anterior)
-  - 0.7 = padrão (70% atual, 30% anterior)
-  - 0.9 = mais reativo (90% atual, 10% anterior)
-  - 1.0 = sem suavização (100% atual)
-- `--lookback-days`: Dias para buscar score anterior. Default: 30
-- `--all`: Processar todas as datas com scores
-
-**Quando usar**:
-- Após rodar o pipeline para suavizar scores recém-calculados
-- Para reprocessamento histórico (use `--all`)
-- Para ajustar estratégia testando diferentes valores de alpha
-
-### Manutenção
-
-#### `force_refresh_data.py`
-Força refresh dos dados (re-ingestão).
-
-```bash
-python scripts/force_refresh_data.py
-```
+**Quando usar**: Mensal ou quando mudar composição do Ibovespa
 
 #### `recalculate_scores.py`
-Recalcula scores sem re-ingerir dados.
+**Uso**: Recalcula scores de todos os ativos
 
 ```bash
-python scripts/recalculate_scores.py
+docker exec -it quant-ranker-backend python scripts/recalculate_scores.py
 ```
 
-#### `init_db.py`
-Inicializa o banco de dados (cria tabelas).
+**Quando usar**: Após mudança de pesos ou fórmulas
+
+---
+
+## 🔍 Scripts de Verificação
+
+### Dados
+
+#### `check_historical_coverage.py`
+**Uso**: Verifica cobertura de dados históricos
 
 ```bash
-python scripts/init_db.py
+docker exec -it quant-ranker-backend python scripts/check_historical_coverage.py
 ```
 
-## 🐳 Uso com Docker
+**Mostra**:
+- Período de dados disponíveis
+- Gaps de dados
+- Cobertura por ticker
 
-Todos os scripts podem ser executados dentro do container:
+#### `check_backtest_data.py`
+**Uso**: Valida dados para backtest
 
 ```bash
-# Executar script Python
-docker exec quant-ranker-backend python scripts/NOME_DO_SCRIPT.py
+docker exec -it quant-ranker-backend python scripts/check_backtest_data.py
+```
 
-# Executar script bash
-docker exec quant-ranker-backend bash scripts/NOME_DO_SCRIPT.sh
+**Verifica**:
+- Snapshots de ranking
+- Preços disponíveis
+- Benchmark disponível
+- Consistência de datas
 
-# Modo interativo (para confirmações)
+#### `check_latest_scores.py`
+**Uso**: Verifica scores mais recentes
+
+```bash
+docker exec -it quant-ranker-backend python scripts/check_latest_scores.py
+```
+
+**Mostra**:
+- Top 10 ações
+- Scores por fator
+- Data do último cálculo
+
+#### `check_db.py`
+**Uso**: Verifica estado geral do banco
+
+```bash
+docker exec -it quant-ranker-backend python scripts/check_db.py
+```
+
+**Mostra**:
+- Contagem de registros por tabela
+- Período de dados
+- Últimas atualizações
+
+---
+
+### Validação
+
+#### `validate_backtest_data.py`
+**Uso**: Valida integridade dos dados de backtest
+
+```bash
+docker exec -it quant-ranker-backend python scripts/validate_backtest_data.py
+```
+
+**Verifica**:
+- Scores normalizados (0-1)
+- Tickers sem sufixo .SA
+- Datas não futuras
+- Preços disponíveis
+
+#### `validate_features.py`
+**Uso**: Valida cálculo de features
+
+```bash
+docker exec -it quant-ranker-backend python scripts/validate_features.py
+```
+
+**Verifica**:
+- Momentum calculado corretamente
+- Value factors válidos
+- Quality factors válidos
+- Risk factors válidos
+
+---
+
+## 🧹 Scripts de Manutenção
+
+### Limpeza
+
+#### `clear_backtest_data.py`
+**Uso**: Limpa dados de backtest
+
+```bash
+docker exec -it quant-ranker-backend python scripts/clear_backtest_data.py \
+  --action clear-all
+```
+
+**Opções**:
+- `--action list`: Lista backtests salvos
+- `--action clear-all`: Limpa todos os dados
+- `--action clear-name --name "nome"`: Limpa backtest específico
+
+#### `clear_and_run_full.py`
+**Uso**: Limpa tudo e executa pipeline completo
+
+```bash
 docker exec -it quant-ranker-backend python scripts/clear_and_run_full.py
 ```
 
-## 📊 Fluxo Típico de Uso
+**⚠️ CUIDADO**: Remove todos os dados e recalcula do zero
 
-### Primeira Execução (Setup Inicial)
+---
+
+### Migrações
+
+#### `migrate_add_benchmark.py`
+**Uso**: Adiciona tabela de benchmark
+
+```bash
+docker exec -it quant-ranker-backend python scripts/migrate_add_benchmark.py
+```
+
+#### `migrate_add_backtest_tables.py`
+**Uso**: Adiciona tabelas de backtest
+
+```bash
+docker exec -it quant-ranker-backend python scripts/migrate_add_backtest_tables.py
+```
+
+#### `migrate_add_confidence_factors.py`
+**Uso**: Adiciona colunas de confiança
+
+```bash
+docker exec -it quant-ranker-backend python scripts/migrate_add_confidence_factors.py
+```
+
+---
+
+## 🔧 Scripts Utilitários
+
+### Inicialização
+
+#### `init_db.py`
+**Uso**: Inicializa banco de dados
+
+```bash
+docker exec -it quant-ranker-backend python scripts/init_db.py
+```
+
+**O que faz**:
+- Cria todas as tabelas
+- Aplica índices
+- Configura constraints
+
+#### `pre_deploy_check.py`
+**Uso**: Verifica sistema antes de deploy
+
+```bash
+docker exec -it quant-ranker-backend python scripts/pre_deploy_check.py
+```
+
+**Verifica**:
+- Variáveis de ambiente
+- Conexão com banco
+- APIs disponíveis
+- Dependências instaladas
+
+---
+
+### Aplicação de Features
+
+#### `apply_temporal_smoothing.py`
+**Uso**: Aplica smoothing aos scores existentes
+
+```bash
+docker exec -it quant-ranker-backend python scripts/apply_temporal_smoothing.py
+```
+
+#### `apply_adaptive_history.py`
+**Uso**: Aplica adaptive history aos scores
+
+```bash
+docker exec -it quant-ranker-backend python scripts/apply_adaptive_history.py
+```
+
+---
+
+## 📊 Scripts de Análise
+
+### Verificação de Features
+
+#### `check_confidence_factors.py`
+**Uso**: Verifica fatores de confiança
+
+```bash
+docker exec -it quant-ranker-backend python scripts/check_confidence_factors.py
+```
+
+#### `check_new_features.py`
+**Uso**: Verifica novas features implementadas
+
+```bash
+docker exec -it quant-ranker-backend python scripts/check_new_features.py
+```
+
+#### `check_pipeline_history.py`
+**Uso**: Verifica histórico de execuções do pipeline
+
+```bash
+docker exec -it quant-ranker-backend python scripts/check_pipeline_history.py
+```
+
+---
+
+## 🐳 Scripts Docker
+
+### `docker_entrypoint.sh`
+**Uso**: Entrypoint do container backend
+
+**O que faz**:
+- Inicializa banco
+- Inicia API FastAPI
+
+### `docker_init.sh`
+**Uso**: Inicialização do container
+
+**O que faz**:
+- Verifica dependências
+- Configura ambiente
+
+---
+
+## 📅 Automação (Cron)
+
+### Atualização Diária
+
+```bash
+# Adicionar ao crontab
+0 19 * * 1-5 cd /home/ubuntu/quant_stock_rank && \
+  docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py \
+  >> /var/log/quant_ranker.log 2>&1
+```
+
+### Backup Semanal
+
+```bash
+# Domingo às 2h
+0 2 * * 0 cd /home/ubuntu/quant_stock_rank && \
+  ./deploy/backup-db.sh \
+  >> /var/log/quant_backup.log 2>&1
+```
+
+---
+
+## 🔗 Fluxos Comuns
+
+### Setup Inicial
 
 ```bash
 # 1. Inicializar banco
-docker exec quant-ranker-backend python scripts/init_db.py
+python scripts/init_db.py
 
-# 2. Executar migration (v2.6.0)
-docker exec quant-ranker-backend python scripts/migrate_add_confidence_factors.py
+# 2. Atualizar lista de ações
+python scripts/update_liquid_stocks.py
 
-# 3. Executar migration (smoothing)
-docker exec quant-ranker-backend python scripts/migrate_add_backtest_smoothing.py
+# 3. Ingerir histórico completo
+python scripts/ingest_full_history.py --start 2020-01-01 --end 2026-03-01
 
-# 4. Rodar pipeline FULL
-docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50 --force-full
+# 4. Ingerir benchmark
+python scripts/ingest_benchmark.py
 
-# 5. Aplicar suavização a todo histórico
-docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
-
-# 6. Verificar scores
-docker exec quant-ranker-backend python scripts/check_latest_scores.py
+# 5. Executar pipeline
+python scripts/run_smart_pipeline.py
 ```
 
-### Execução Diária (Atualização)
+### Preparar Backtest
 
 ```bash
-# 1. Rodar pipeline incremental
-docker exec quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
+# 1. Verificar dados
+python scripts/check_backtest_data.py
 
-# 2. Aplicar suavização temporal
-docker exec quant-ranker-backend python scripts/apply_temporal_smoothing.py
+# 2. Gerar snapshots históricos
+python scripts/generate_historical_scores.py \
+  --start 2022-01-01 --end 2026-03-01 --frequency monthly
 
-# 3. Verificar scores
-docker exec quant-ranker-backend python scripts/check_latest_scores.py
+# 3. Executar backtest
+python scripts/run_optimized_backtest.py
 ```
 
-### Troubleshooting
+### Atualização Diária
 
 ```bash
-# 1. Verificar datas dos dados
-docker exec quant-ranker-backend python scripts/check_data_dates.py
-
-# 2. Verificar confidence factors
-docker exec quant-ranker-backend python scripts/check_confidence_factors.py
-
-# 3. Validar features
-docker exec quant-ranker-backend python scripts/validate_features.py
-
-# 4. Se necessário, limpar e reprocessar
-docker exec -it quant-ranker-backend python scripts/clear_and_run_full.py --mode liquid --limit 50
+# Executar pipeline completo
+python scripts/run_smart_pipeline.py
 ```
 
-## ⚠️ Scripts Destrutivos
+---
 
-Estes scripts DELETAM dados. Use com cuidado!
-
-- `clear_and_run_full.py` - Deleta TODOS os dados
-- `clear_and_run_full.sh` - Versão bash do acima
-
-**SEMPRE faça backup antes de usar scripts destrutivos!**
-
-```bash
-# Backup do banco
-docker exec quant-ranker-db pg_dump -U postgres quant_ranker > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# Restore do banco
-cat backup_YYYYMMDD_HHMMSS.sql | docker exec -i quant-ranker-db psql -U postgres quant_ranker
-```
-
-## 📝 Logs
-
-Todos os scripts geram logs. Para ver:
-
-```bash
-# Logs do container
-docker logs quant-ranker-backend --tail 100
-
-# Logs em tempo real
-docker logs -f quant-ranker-backend
-
-# Logs do pipeline
-cat pipeline_docker.log
-```
-
-## 🔧 Desenvolvimento
-
-Para adicionar novos scripts:
-
-1. Criar arquivo `.py` ou `.sh` em `scripts/`
-2. Adicionar shebang e docstring
-3. Adicionar ao `.gitignore` se for temporário
-4. Documentar neste README
-5. Testar localmente antes de commit
-
-## 📚 Documentação Relacionada
-
-- [EC2_DEPLOY_V2.6.0.md](../deploy/EC2_DEPLOY_V2.6.0.md) - Procedimento de deploy
-- [ADAPTIVE_HISTORY_IMPLEMENTATION.md](../ADAPTIVE_HISTORY_IMPLEMENTATION.md) - Histórico adaptativo
-- [PIPELINE_ARCHITECTURE.md](../docs/PIPELINE_ARCHITECTURE.md) - Arquitetura do pipeline
-- [GUIA_USO.md](../docs/GUIA_USO.md) - Guia de uso completo
+**Última atualização**: Março 2026  
+**Versão**: 2.6.0
