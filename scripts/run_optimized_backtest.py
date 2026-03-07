@@ -46,6 +46,7 @@ def run_optimized_backtest():
     print("  - Rebalanceamento: Mensal")
     print("  - Top N: 10 ações")
     print("  - Benchmark: IBOVESPA (^BVSP)")
+    print("  - Período: 2022-2026 (baseado em dados disponíveis)")
     
     # Conectar ao banco
     db = SessionLocal()
@@ -89,9 +90,18 @@ def run_optimized_backtest():
             return
         
         # Configurar backtest engine
+        # Ajustar período baseado nos dados disponíveis
+        if first_ranking and last_ranking:
+            backtest_start = max(date(2022, 1, 1), first_ranking.date)
+            backtest_end = min(date(2026, 3, 1), last_ranking.date)
+            print(f"\n  Usando período: {backtest_start} até {backtest_end}")
+        else:
+            backtest_start = date(2022, 1, 1)
+            backtest_end = date(2026, 3, 1)
+        
         engine = BacktestEngine(
-            start_date=date(2020, 1, 1),  # 5 anos de backtest
-            end_date=date(2024, 12, 31),
+            start_date=backtest_start,
+            end_date=backtest_end,
             top_n=10,
             rebalance_frequency='monthly',
             weight_method='score',  # Score-weighted
@@ -164,8 +174,8 @@ def run_optimized_backtest():
         service = BacktestService(db)
         backtest_id = service.save_backtest_result(
             config={
-                'start_date': '2020-01-01',
-                'end_date': '2024-12-31',
+                'start_date': str(backtest_start),
+                'end_date': str(backtest_end),
                 'top_n': 10,
                 'rebalance_frequency': 'monthly',
                 'weight_method': 'score',
