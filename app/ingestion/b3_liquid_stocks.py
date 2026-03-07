@@ -3,11 +3,17 @@ Módulo para buscar os ativos mais líquidos da B3 (Bolsa de Valores do Brasil).
 
 Este módulo usa o Yahoo Finance para identificar os ativos mais líquidos
 baseado no volume médio de negociação.
+
+Estratégia:
+1. Busca componentes do Ibovespa (índice principal)
+2. Complementa com lista de ações conhecidas
+3. Filtra por liquidez real (volume financeiro)
+4. Retorna top N mais líquidas
 """
 
 import logging
 from datetime import date, timedelta
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set
 import pandas as pd
 import yfinance as yf
 
@@ -78,11 +84,68 @@ class B3LiquidStocksFetcher:
         """Inicializa o fetcher."""
         configure_yfinance()
     
+    def get_ibovespa_components(self) -> Set[str]:
+        """
+        Tenta buscar componentes do Ibovespa.
+        
+        Returns:
+            Set de tickers do Ibovespa
+        """
+        try:
+            logger.info("Fetching Ibovespa components...")
+            ibov = yf.Ticker("^BVSP")
+            
+            # Tentar obter componentes (nem sempre disponível)
+            # Fallback para lista conhecida se não funcionar
+            components = set()
+            
+            # Método 1: Tentar via info
+            try:
+                info = ibov.info
+                if 'components' in info:
+                    components = set(info['components'])
+            except:
+                pass
+            
+            if components:
+                logger.info(f"Found {len(components)} Ibovespa components via API")
+                return components
+            
+        except Exception as e:
+            logger.warning(f"Could not fetch Ibovespa components: {e}")
+        
+        # Fallback: retornar set vazio para usar apenas B3_UNIVERSE
+        return set()
+    
+    def get_candidate_universe(self) -> List[str]:
+        """
+        Monta universo de candidatos combinando múltiplas fontes.
+        
+        Returns:
+            Lista de tickers candidatos
+        """
+        candidates = set(B3_UNIVERSE)
+        
+        # Tentar adicionar componentes do Ibovespa
+        ibov_components = self.get_ibovespa_components()
+        if ibov_components:
+            # Adicionar .SA se necessário
+            ibov_with_suffix = {
+                t if t.endswith('.SA') else f"{t}.SA" 
+                for t in ibov_components
+            }
+            candidates.update(ibov_with_suffix)
+            logger.info(f"Added {len(ibov_with_suffix)} Ibovespa components to universe")
+        
+        logger.info(f"Total candidate universe: {len(candidates)} stocks")
+        return list(candidates)
+    
     def fetch_most_liquid_stocks(
         self,
         limit: int = 100,
         lookback_days: int = 30,
-        min_volume: float = 1_000_000.0
+        min_volume: float = 1_000_000.0,
+        use_dynamic_universe: bool = True
     ) -> List[str]:
         """
         Busca os ativos mais líquidos da B3 baseado no volume médio.
@@ -91,11 +154,18 @@ class B3LiquidStocksFetcher:
             limit: Número máximo de ativos a retornar
             lookback_days: Dias para calcular volume médio
             min_volume: Volume mínimo diário (em R$) para considerar
+            use_dynamic_universe: Se True, tenta buscar Ibovespa dinamicamente
         
         Returns:
             Lista de tickers ordenados por liquidez (mais líquido primeiro)
         """
-        logger.info(f"Fetching most liquid stocks from B3 universe ({len(B3_UNIVERSE)} stocks)")
+        # Montar universo de candidatos
+        if use_dynamic_universe:
+            universe = self.get_candidate_universe()
+        else:
+            universe = B3_UNIVERSE
+        
+        logger.info(f"Fetching most liquid stocks from universe ({len(universe)} stocks)")
         logger.info(f"Parameters: limit={limit}, lookback_days={lookback_days}, min_volume={min_volume:,.0f}")
         
         end_date = date.today()
@@ -103,7 +173,7 @@ class B3LiquidStocksFetcher:
         
         liquidity_data = []
         
-        for ticker in B3_UNIVERSE:
+        for ticker in universe:
             try:
                 # Buscar dados de volume
                 ticker_obj = yf.Ticker(ticker)
@@ -177,7 +247,8 @@ class B3LiquidStocksFetcher:
         self,
         limit: int = 100,
         lookback_days: int = 30,
-        min_volume: float = 1_000_000.0
+        min_volume: float = 1_000_000.0,
+        use_dynamic_universe: bool = True
     ) -> Tuple[List[str], pd.DataFrame]:
         """
         Busca os ativos mais líquidos com detalhes completos.
@@ -186,18 +257,25 @@ class B3LiquidStocksFetcher:
             limit: Número máximo de ativos a retornar
             lookback_days: Dias para calcular volume médio
             min_volume: Volume mínimo diário (em R$) para considerar
+            use_dynamic_universe: Se True, tenta buscar Ibovespa dinamicamente
         
         Returns:
             Tupla (lista de tickers, DataFrame com detalhes de liquidez)
         """
         logger.info(f"Fetching most liquid stocks with details")
         
+        # Montar universo de candidatos
+        if use_dynamic_universe:
+            universe = self.get_candidate_universe()
+        else:
+            universe = B3_UNIVERSE
+        
         end_date = date.today()
         start_date = end_date - timedelta(days=lookback_days)
         
         liquidity_data = []
         
-        for ticker in B3_UNIVERSE:
+        for ticker in universe:
             try:
                 ticker_obj = yf.Ticker(ticker)
                 df = ticker_obj.history(start=start_date, end=end_date)
