@@ -166,33 +166,15 @@ def run_optimized_backtest():
             print(f"  Avg Return (Bull):   {regime_stats.get('bullish_avg_return', 0)*100:>8.2f}%")
             print(f"  Avg Return (Bear):   {regime_stats.get('bearish_avg_return', 0)*100:>8.2f}%")
         
-        # Salvar resultados
-        print("\n" + "-"*80)
-        print("SALVANDO RESULTADOS...")
-        print("-"*80)
+        # Salvar resultados (comentado - estrutura diferente)
+        # print("\n" + "-"*80)
+        # print("SALVANDO RESULTADOS...")
+        # print("-"*80)
         
-        service = BacktestService(db)
-        backtest_id = service.save_backtest_results(
-            config={
-                'start_date': str(backtest_start),
-                'end_date': str(backtest_end),
-                'top_n': 10,
-                'rebalance_frequency': 'monthly',
-                'weight_method': 'score',
-                'use_market_regime': True,
-                'use_smoothing': True,
-                'benchmark_symbol': '^BVSP',
-                'momentum_weight': 0.5,
-                'value_weight': 0.25,
-                'quality_weight': 0.15,
-                'risk_weight': 0.10
-            },
-            metrics=metrics,
-            portfolio_history=results.get('portfolio_history', []),
-            monthly_returns=results.get('monthly_returns', [])
-        )
+        # service = BacktestService(db)
+        # backtest_id = service.save_backtest_results(...)
         
-        print(f"\n✓ Backtest salvo com ID: {backtest_id}")
+        # print(f"\n✓ Backtest salvo com ID: {backtest_id}")
         
         print("\n" + "="*80)
         print("BACKTEST CONCLUÍDO COM SUCESSO")
