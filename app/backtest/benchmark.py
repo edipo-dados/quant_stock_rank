@@ -216,11 +216,18 @@ class BenchmarkManager:
         # Ordenar por data
         prices_df = prices_df.sort_values('date').reset_index(drop=True)
         
-        # Calcular retornos diários - usar apply para garantir que funciona
-        closes = prices_df['close'].tolist()
+        # Calcular retornos diários manualmente
+        closes = []
+        for idx, row in prices_df.iterrows():
+            close_val = row['close']
+            # Se close é um array/series, pegar primeiro valor
+            if hasattr(close_val, '__iter__') and not isinstance(close_val, str):
+                close_val = list(close_val)[0] if len(list(close_val)) > 0 else None
+            closes.append(float(close_val) if close_val is not None else None)
+        
         returns = [None]  # Primeiro retorno é None
         for i in range(1, len(closes)):
-            if closes[i-1] and closes[i-1] != 0:
+            if closes[i-1] and closes[i-1] != 0 and closes[i] is not None:
                 ret = (closes[i] - closes[i-1]) / closes[i-1]
                 returns.append(ret)
             else:
