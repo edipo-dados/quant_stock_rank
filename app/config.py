@@ -18,15 +18,15 @@ class Settings(BaseSettings):
     # API Keys
     fmp_api_key: str = ""  # Default vazio para testes
     
-    # Scoring Weights (Modelo Multifator Robusto)
-    momentum_weight: float = 0.4  # Momentum premium
-    quality_weight: float = 0.2   # Quality premium
-    value_weight: float = 0.3     # Value premium
-    risk_weight: float = 0.1      # Low volatility premium
-    size_weight: float = 0.0      # Size premium weight (0.0 = disabled)
+    # Scoring Weights (Modelo Multifator Otimizado)
+    momentum_weight: float = 0.5   # Momentum premium (aumentado)
+    quality_weight: float = 0.15   # Quality premium (reduzido)
+    value_weight: float = 0.25     # Value premium (reduzido)
+    risk_weight: float = 0.10      # Low volatility premium
+    size_weight: float = 0.0       # Size premium weight (0.0 = disabled)
     
     # Eligibility Filter Parameters
-    minimum_volume: float = 100000  # Minimum average daily volume
+    minimum_volume: float = 5_000_000  # Minimum average daily volume (aumentado para 5M)
     minimum_market_cap: float = 1_000_000_000  # Minimum market cap (1 billion BRL)
     
     # Quality Factor Parameters
