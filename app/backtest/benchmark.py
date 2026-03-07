@@ -210,13 +210,18 @@ class BenchmarkManager:
         # Fazer cópia para não modificar o original
         prices_df = prices_df.copy()
         
-        # Garantir que 'close' é uma Series
-        if isinstance(prices_df['close'], pd.DataFrame):
-            prices_df['close'] = prices_df['close'].iloc[:, 0]
+        # Garantir que temos apenas as colunas necessárias
+        prices_df = prices_df[['date', 'close']].copy()
+        
+        # Garantir que 'close' é numérico
+        prices_df['close'] = pd.to_numeric(prices_df['close'], errors='coerce')
         
         # Calcular retornos diários
         prices_df = prices_df.sort_values('date').reset_index(drop=True)
-        prices_df['daily_return'] = prices_df['close'].pct_change()
+        
+        # Calcular pct_change e garantir que é Series
+        daily_returns = prices_df['close'].pct_change()
+        prices_df['daily_return'] = daily_returns.values  # Usar .values para garantir Series
         
         records_inserted = 0
         
