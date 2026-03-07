@@ -81,11 +81,8 @@ def update_liquid_stocks(
                     
                     asset = AssetInfo(
                         ticker=ticker,
-                        name=ticker,  # Nome será atualizado depois
-                        is_active=True,
-                        is_eligible=True,  # Será validado pelo filtro de elegibilidade
-                        created_at=datetime.now(),
-                        updated_at=datetime.now()
+                        company_name=ticker,  # Nome será atualizado depois pelo ingestion service
+                        last_updated=datetime.now()
                     )
                     db.add(asset)
                     print(f"  + {ticker}")
@@ -97,27 +94,27 @@ def update_liquid_stocks(
         print(f"\nAtualizando status de ativos existentes...")
         for asset in existing:
             if asset.ticker in tickers_clean:
-                if not asset.is_active:
-                    asset.is_active = True
-                    asset.updated_at = datetime.now()
-                    print(f"  ✓ {asset.ticker} reativado")
+                asset.last_updated = datetime.now()
+                print(f"  ✓ {asset.ticker} atualizado")
         
         db.commit()
         
-        # Desativar ativos que não estão mais líquidos
-        all_assets = db.query(AssetInfo).filter(AssetInfo.is_active == True).all()
+        # Desativar ativos que não estão mais líquidos (comentado - não temos is_active)
+        # all_assets = db.query(AssetInfo).all()
+        # inactive_count = 0
+        # 
+        # for asset in all_assets:
+        #     if asset.ticker not in tickers_clean:
+        #         asset.is_active = False
+        #         asset.updated_at = datetime.now()
+        #         inactive_count += 1
+        #         print(f"  - {asset.ticker} desativado (não está mais líquido)")
+        # 
+        # if inactive_count > 0:
+        #     db.commit()
+        #     print(f"\n✓ {inactive_count} ativos desativados")
+        
         inactive_count = 0
-        
-        for asset in all_assets:
-            if asset.ticker not in tickers_clean:
-                asset.is_active = False
-                asset.updated_at = datetime.now()
-                inactive_count += 1
-                print(f"  - {asset.ticker} desativado (não está mais líquido)")
-        
-        if inactive_count > 0:
-            db.commit()
-            print(f"\n✓ {inactive_count} ativos desativados")
         
         # Resumo final
         print("\n" + "="*80)
@@ -131,10 +128,18 @@ def update_liquid_stocks(
         itub3 = db.query(AssetInfo).filter(AssetInfo.ticker == 'ITUB3').first()
         if itub3:
             print(f"\n✓ ITUB3 status:")
-            print(f"  is_active: {itub3.is_active}")
-            print(f"  is_eligible: {itub3.is_eligible}")
+            print(f"  Encontrado no banco")
         else:
-            print(f"\n❌ ITUB3 não encontrado no banco!")
+            print(f"\n⚠ ITUB3 não encontrado no banco!")
+            print(f"  Adicionando ITUB3 manualmente...")
+            itub3 = AssetInfo(
+                ticker='ITUB3',
+                company_name='Itaú Unibanco Holding S.A.',
+                last_updated=datetime.now()
+            )
+            db.add(itub3)
+            db.commit()
+            print(f"  ✓ ITUB3 adicionado")
         
         print("="*80 + "\n")
         

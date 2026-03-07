@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # Lista de ativos da B3 para análise de liquidez
 # Inclui as principais ações do Ibovespa e outros ativos líquidos
 B3_UNIVERSE = [
-    # Bancos
-    "ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "SANB11.SA", "BBDC3.SA", "ITUB3.SA",
+    # Bancos (incluindo ITUB3 e ITUB4)
+    "ITUB3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "SANB11.SA", "BBDC3.SA",
     
     # Petróleo e Energia
     "PETR4.SA", "PETR3.SA", "PRIO3.SA", "CSAN3.SA", "UGPA3.SA", "EQTL3.SA",
