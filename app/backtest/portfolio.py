@@ -184,6 +184,17 @@ class Portfolio:
         Returns:
             Lista de tickers selecionados
         """
+        # Garantir que score_column é numérico
+        if score_column in scores_df.columns:
+            scores_df[score_column] = pd.to_numeric(scores_df[score_column], errors='coerce')
+            
+            # Remover NaN
+            scores_df = scores_df.dropna(subset=[score_column])
+        
+        if scores_df.empty:
+            logger.warning(f"No valid scores in column {score_column}")
+            return []
+        
         # Ordenar por score (descendente) e selecionar top N
         top_assets = scores_df.nlargest(top_n, score_column)
         

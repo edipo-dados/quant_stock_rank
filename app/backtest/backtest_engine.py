@@ -213,6 +213,14 @@ class BacktestEngine:
         
         df = pd.DataFrame(data)
         
+        # Garantir tipos corretos
+        df['final_score'] = pd.to_numeric(df['final_score'], errors='coerce')
+        df['final_score_smoothed'] = pd.to_numeric(df['final_score_smoothed'], errors='coerce')
+        df['rank'] = pd.to_numeric(df['rank'], errors='coerce')
+        
+        # Remover linhas com NaN em scores
+        df = df.dropna(subset=['final_score'])
+        
         # Ordenar por rank
         df = df.sort_values('rank')
         
