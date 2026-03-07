@@ -5,15 +5,46 @@ O ITUB3 não está mais aparecendo no ranking da aplicação, mesmo sendo histor
 
 ## Solução - Execute no EC2
 
-### 1. Conecte no EC2 e acesse o container
+### Opção 1: Usando o script auxiliar (mais fácil)
+
+```bash
+# No EC2, no diretório do projeto
+cd ~/quant_stock_rank
+git pull origin main
+bash scripts/find_container.sh
+```
+
+O script vai mostrar o nome correto do container e o comando para executar.
+
+### Opção 2: Manual
+
+### 1. Conecte no EC2 e encontre o container
 
 ```bash
 # SSH no EC2
 ssh -i sua-chave.pem ubuntu@seu-ec2-ip
 
-# Entre no container do backend
-docker exec -it quant_stock_rank-backend-1 bash
+# Vá para o diretório do projeto
+cd ~/quant_stock_rank
+
+# Atualize o código
+git pull origin main
+
+# Encontre o nome do container
+bash scripts/find_container.sh
+
+# OU liste manualmente
+docker ps
+
+# Entre no container (substitua CONTAINER_NAME pelo nome correto)
+docker exec -it CONTAINER_NAME bash
 ```
+
+**Exemplos de nomes possíveis:**
+- `quant_stock_rank-backend-1`
+- `backend`
+- `quant-backend`
+- `app-backend-1`
 
 ### 2. Execute o diagnóstico
 
