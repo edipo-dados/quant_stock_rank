@@ -281,7 +281,7 @@ class PerformanceMetrics:
             strategy_returns: Série de retornos periódicos da estratégia
             benchmark_returns: Série de retornos periódicos do benchmark
             risk_free_rate: Taxa livre de risco anualizada (ex: 0.05 para 5%)
-            periods_per_year: Número de períodos por ano (12 para mensal)
+            periods_per_year: Número de períodos por ano (12 para mensal, 252 para diário)
         
         Returns:
             Tuple de (alpha_anualizado_pct, beta)
@@ -312,15 +312,19 @@ class PerformanceMetrics:
         covariance = strategy.cov(benchmark)
         benchmark_variance = benchmark.var()
         
-        if benchmark_variance == 0:
-            logger.warning("Benchmark variance is zero, setting beta=1.0")
+        if benchmark_variance == 0 or pd.isna(benchmark_variance):
+            logger.warning("Benchmark variance is zero or NaN, setting beta=1.0")
             beta = 1.0
         else:
             beta = covariance / benchmark_variance
-        
-        # Validar Beta (deve estar entre -2 e 3 tipicamente)
-        if abs(beta) > 5:
-            logger.warning(f"Beta value seems unrealistic: {beta:.2f}")
+            
+            # Validar Beta (deve estar entre -2 e 3 tipicamente)
+            if pd.isna(beta):
+                logger.warning("Beta is NaN, setting beta=1.0")
+                beta = 1.0
+            elif abs(beta) > 5:
+                logger.warning(f"Beta value seems unrealistic: {beta:.2f}, capping at ±3")
+                beta = max(-3.0, min(3.0, beta))
         
         # Calcular retornos médios periódicos
         strategy_mean = strategy.mean()
@@ -337,13 +341,18 @@ class PerformanceMetrics:
         alpha_annual = alpha_periodic * periods_per_year
         
         # Validar Alpha (deve estar entre -50% e +50% tipicamente)
-        if abs(alpha_annual) > 0.5:
+        if pd.isna(alpha_annual):
+            logger.warning("Alpha is NaN, setting to 0.0")
+            alpha_annual = 0.0
+        elif abs(alpha_annual) > 0.5:
             logger.warning(
                 f"Alpha value seems unrealistic: {alpha_annual*100:.2f}%. "
                 f"Strategy mean: {strategy_mean*100:.4f}%, "
                 f"Benchmark mean: {benchmark_mean*100:.4f}%, "
-                f"Beta: {beta:.2f}"
+                f"Beta: {beta:.2f}, "
+                f"Capping at ±50%"
             )
+            alpha_annual = max(-0.5, min(0.5, alpha_annual))
         
         logger.info(
             f"Alpha/Beta calculated: Alpha={alpha_annual*100:.2f}%, Beta={beta:.2f} "
@@ -370,7 +379,7 @@ class PerformanceMetrics:
         Args:
             strategy_returns: Série de retornos periódicos da estratégia
             benchmark_returns: Série de retornos periódicos do benchmark
-            periods_per_year: Número de períodos por ano
+            periods_per_year: Número de períodos por ano (12 para mensal, 252 para diário)
         
         Returns:
             Information Ratio anualizado
@@ -400,20 +409,25 @@ class PerformanceMetrics:
         mean_excess = excess_returns.mean()
         std_excess = excess_returns.std()
         
-        if std_excess == 0:
-            logger.warning("Tracking error is zero, cannot calculate IR")
+        if std_excess == 0 or pd.isna(std_excess):
+            logger.warning("Tracking error is zero or NaN, cannot calculate IR")
             return 0.0
         
         # Anualizar
         ir = (mean_excess / std_excess) * np.sqrt(periods_per_year)
         
-        # Validar IR (deve estar entre -2 e 2 tipicamente)
-        if abs(ir) > 3:
+        # Validar IR (deve estar entre -3 e 3 tipicamente)
+        if pd.isna(ir):
+            logger.warning("IR is NaN, setting to 0.0")
+            return 0.0
+        elif abs(ir) > 3:
             logger.warning(
                 f"IR value seems unrealistic: {ir:.2f}. "
                 f"Mean excess: {mean_excess*100:.4f}%, "
-                f"Tracking error: {std_excess*100:.4f}%"
+                f"Tracking error: {std_excess*100:.4f}%, "
+                f"Capping at ±3"
             )
+            ir = max(-3.0, min(3.0, ir))
         
         logger.info(
             f"Information Ratio calculated: {ir:.2f} "
