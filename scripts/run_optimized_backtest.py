@@ -51,6 +51,43 @@ def run_optimized_backtest():
     db = SessionLocal()
     
     try:
+        # Verificar se há dados no banco
+        from app.models.schemas import RankingHistory, RawPriceDaily
+        
+        print("\n" + "-"*80)
+        print("VERIFICANDO DADOS DISPONÍVEIS...")
+        print("-"*80)
+        
+        # Verificar ranking history
+        ranking_count = db.query(RankingHistory).count()
+        print(f"  Ranking snapshots: {ranking_count}")
+        
+        if ranking_count == 0:
+            print("\n❌ ERRO: Nenhum ranking snapshot encontrado!")
+            print("\nVocê precisa executar o pipeline primeiro:")
+            print("  docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py")
+            print("\nOu gerar snapshots históricos:")
+            print("  docker exec -it quant-ranker-backend python scripts/generate_historical_scores.py")
+            return
+        
+        # Verificar datas disponíveis
+        first_ranking = db.query(RankingHistory).order_by(RankingHistory.date).first()
+        last_ranking = db.query(RankingHistory).order_by(RankingHistory.date.desc()).first()
+        
+        if first_ranking and last_ranking:
+            print(f"  Primeira data: {first_ranking.date}")
+            print(f"  Última data: {last_ranking.date}")
+        
+        # Verificar preços
+        price_count = db.query(RawPriceDaily).count()
+        print(f"  Preços disponíveis: {price_count}")
+        
+        if price_count == 0:
+            print("\n❌ ERRO: Nenhum preço encontrado!")
+            print("\nExecute o pipeline de ingestão:")
+            print("  docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py")
+            return
+        
         # Configurar backtest engine
         engine = BacktestEngine(
             start_date=date(2020, 1, 1),  # 5 anos de backtest
@@ -77,6 +114,16 @@ def run_optimized_backtest():
         
         metrics = results.get('metrics', {})
         
+        # Verificar se há resultados válidos
+        if metrics.get('total_return', 0) == 0 and metrics.get('cagr', 0) == 0:
+            print("⚠ AVISO: Backtest retornou métricas zeradas!")
+            print("\nPossíveis causas:")
+            print("  1. Período sem dados suficientes")
+            print("  2. Nenhum ativo passou nos filtros de elegibilidade")
+            print("  3. Snapshots não foram criados corretamente")
+            print("\nVerifique os logs acima para mais detalhes.")
+            return
+        
         print("Performance Metrics:")
         print(f"  Total Return:        {metrics.get('total_return', 0)*100:>8.2f}%")
         print(f"  CAGR:                {metrics.get('cagr', 0)*100:>8.2f}%")
@@ -89,11 +136,17 @@ def run_optimized_backtest():
         print(f"  Calmar Ratio:        {metrics.get('calmar_ratio', 0):>8.2f}")
         
         print("\nBenchmark Comparison:")
-        print(f"  Benchmark Return:    {metrics.get('benchmark_total_return', 0)*100:>8.2f}%")
-        print(f"  Benchmark CAGR:      {metrics.get('benchmark_cagr', 0)*100:>8.2f}%")
-        print(f"  Alpha:               {metrics.get('alpha', 0)*100:>8.2f}%")
-        print(f"  Beta:                {metrics.get('beta', 0):>8.2f}")
-        print(f"  Information Ratio:   {metrics.get('information_ratio', 0):>8.2f}")
+        benchmark_return = metrics.get('benchmark_total_return')
+        benchmark_cagr = metrics.get('benchmark_cagr')
+        alpha = metrics.get('alpha')
+        beta = metrics.get('beta')
+        info_ratio = metrics.get('information_ratio')
+        
+        print(f"  Benchmark Return:    {benchmark_return*100 if benchmark_return else 0:>8.2f}%")
+        print(f"  Benchmark CAGR:      {benchmark_cagr*100 if benchmark_cagr else 0:>8.2f}%")
+        print(f"  Alpha:               {alpha*100 if alpha else 0:>8.2f}%")
+        print(f"  Beta:                {beta if beta else 0:>8.2f}")
+        print(f"  Information Ratio:   {info_ratio if info_ratio else 0:>8.2f}")
         
         print("\nMarket Regime Analysis:")
         regime_stats = results.get('regime_stats', {})
