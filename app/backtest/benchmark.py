@@ -210,18 +210,23 @@ class BenchmarkManager:
         # Fazer cópia para não modificar o original
         prices_df = prices_df.copy()
         
-        # Garantir que temos apenas as colunas necessárias
-        prices_df = prices_df[['date', 'close']].copy()
+        # Resetar index para garantir estrutura limpa
+        prices_df = prices_df.reset_index(drop=True)
         
-        # Garantir que 'close' é numérico
-        prices_df['close'] = pd.to_numeric(prices_df['close'], errors='coerce')
+        # Extrair apenas date e close como colunas simples
+        if 'date' in prices_df.columns and 'close' in prices_df.columns:
+            # Criar novo DataFrame com apenas as colunas necessárias
+            clean_df = pd.DataFrame({
+                'date': prices_df['date'].values,
+                'close': pd.to_numeric(prices_df['close'].values.flatten(), errors='coerce')
+            })
+            prices_df = clean_df
+        else:
+            raise ValueError("DataFrame must have 'date' and 'close' columns")
         
         # Calcular retornos diários
         prices_df = prices_df.sort_values('date').reset_index(drop=True)
-        
-        # Calcular pct_change e garantir que é Series
-        daily_returns = prices_df['close'].pct_change()
-        prices_df['daily_return'] = daily_returns.values  # Usar .values para garantir Series
+        prices_df['daily_return'] = prices_df['close'].pct_change()
         
         records_inserted = 0
         
