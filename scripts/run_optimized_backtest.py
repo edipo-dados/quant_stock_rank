@@ -172,7 +172,7 @@ def run_optimized_backtest():
         print("-"*80)
         
         service = BacktestService(db)
-        backtest_id = service.save_backtest_result(
+        backtest_id = service.save_backtest_results(
             config={
                 'start_date': str(backtest_start),
                 'end_date': str(backtest_end),
