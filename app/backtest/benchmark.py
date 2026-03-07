@@ -210,6 +210,10 @@ class BenchmarkManager:
         # Fazer cópia para não modificar o original
         prices_df = prices_df.copy()
         
+        # Garantir que 'close' é uma Series
+        if isinstance(prices_df['close'], pd.DataFrame):
+            prices_df['close'] = prices_df['close'].iloc[:, 0]
+        
         # Calcular retornos diários
         prices_df = prices_df.sort_values('date').reset_index(drop=True)
         prices_df['daily_return'] = prices_df['close'].pct_change()
