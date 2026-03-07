@@ -238,23 +238,43 @@ class BenchmarkManager:
         records_inserted = 0
         
         for _, row in prices_df.iterrows():
+            # Extrair valores escalares
+            date_val = row['date']
+            close_val = row['close']
+            return_val = row['daily_return']
+            
+            # Converter para escalar se necessário
+            if hasattr(close_val, 'iloc'):
+                close_val = float(close_val.iloc[0])
+            elif hasattr(close_val, '__iter__') and not isinstance(close_val, str):
+                close_val = float(list(close_val)[0])
+            else:
+                close_val = float(close_val) if close_val is not None else None
+            
+            if hasattr(return_val, 'iloc'):
+                return_val = float(return_val.iloc[0]) if not pd.isna(return_val.iloc[0]) else None
+            elif pd.isna(return_val):
+                return_val = None
+            else:
+                return_val = float(return_val) if return_val is not None else None
+            
             # Verificar se já existe
             existing = self.db.query(BenchmarkPrice).filter(
                 BenchmarkPrice.symbol == self.symbol,
-                BenchmarkPrice.date == row['date']
+                BenchmarkPrice.date == date_val
             ).first()
             
             if existing:
                 # Atualizar
-                existing.close = row['close']
-                existing.daily_return = row['daily_return']
+                existing.close = close_val
+                existing.daily_return = return_val
             else:
                 # Inserir novo
                 record = BenchmarkPrice(
                     symbol=self.symbol,
-                    date=row['date'],
-                    close=row['close'],
-                    daily_return=row['daily_return']
+                    date=date_val,
+                    close=close_val,
+                    daily_return=return_val
                 )
                 self.db.add(record)
                 records_inserted += 1
