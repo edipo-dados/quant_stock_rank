@@ -2,29 +2,12 @@
 Script de teste do pipeline com apenas 5 ativos.
 
 Útil para validar configuração e testar rapidamente.
+Usa o script clear_and_run_full.py com limite de 5 ativos.
 """
 
+import subprocess
 import sys
-import os
 from pathlib import Path
-from datetime import datetime, timedelta
-import logging
-
-# Adicionar diretório raiz ao PYTHONPATH
-root_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(root_dir))
-
-from app.models.database import SessionLocal
-from app.ingestion.ingestion_service import IngestionService
-from app.factor_engine.feature_service import FeatureService
-from app.scoring.score_service import ScoreService
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-logger = logging.getLogger(__name__)
 
 # 5 ativos para teste (líquidos e conhecidos)
 TEST_TICKERS = [
@@ -35,127 +18,65 @@ TEST_TICKERS = [
     "ABEV3"    # Ambev
 ]
 
-
 def main():
     """Executa pipeline de teste com 5 ativos."""
     
-    logger.info("=" * 60)
-    logger.info("PIPELINE DE TESTE - 5 ATIVOS")
-    logger.info("=" * 60)
-    logger.info(f"Ativos: {', '.join(TEST_TICKERS)}")
-    logger.info("")
+    print("=" * 60)
+    print("PIPELINE DE TESTE - 5 ATIVOS")
+    print("=" * 60)
+    print(f"Ativos: {', '.join(TEST_TICKERS)}")
+    print("")
+    print("Executando clear_and_run_full.py com limite de 5 ativos...")
+    print("")
     
-    db = SessionLocal()
+    # Executar clear_and_run_full.py com limite de 5
+    script_path = Path(__file__).parent / "clear_and_run_full.py"
+    
+    cmd = [
+        sys.executable,
+        str(script_path),
+        "--mode", "liquid",
+        "--limit", "5"
+    ]
     
     try:
-        # Calcular período (últimos 2 anos para ter dados suficientes)
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=730)  # 2 anos
+        result = subprocess.run(
+            cmd,
+            cwd=Path(__file__).parent.parent,
+            timeout=600  # 10 minutos
+        )
         
-        logger.info(f"Período: {start_date} a {end_date}")
-        logger.info("")
-        
-        # 1. INGESTÃO DE PREÇOS
-        logger.info("=" * 60)
-        logger.info("ETAPA 1/3: Ingestão de Preços")
-        logger.info("=" * 60)
-        
-        from app.ingestion.yahoo_client import YahooFinanceClient
-        from app.ingestion.yahoo_finance_client import YahooFinanceClient as YahooFundamentalsClient
-        
-        yahoo_client = YahooFinanceClient()
-        yahoo_fundamentals_client = YahooFundamentalsClient()
-        ingestion_service = IngestionService(yahoo_client, yahoo_fundamentals_client, db)
-        
-        for ticker in TEST_TICKERS:
-            logger.info(f"Baixando preços de {ticker}...")
-            try:
-                ingestion_service.ingest_daily_prices(
-                    ticker=ticker,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-                logger.info(f"✓ {ticker} - Preços baixados")
-            except Exception as e:
-                logger.error(f"✗ {ticker} - Erro: {e}")
-        
-        logger.info("")
-        
-        # 2. CÁLCULO DE FEATURES
-        logger.info("=" * 60)
-        logger.info("ETAPA 2/3: Cálculo de Features")
-        logger.info("=" * 60)
-        
-        feature_service = FeatureService(db)
-        
-        for ticker in TEST_TICKERS:
-            logger.info(f"Calculando features de {ticker}...")
-            try:
-                feature_service.calculate_and_store_features(
-                    ticker=ticker,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-                logger.info(f"✓ {ticker} - Features calculadas")
-            except Exception as e:
-                logger.error(f"✗ {ticker} - Erro: {e}")
-        
-        logger.info("")
-        
-        # 3. CÁLCULO DE SCORES
-        logger.info("=" * 60)
-        logger.info("ETAPA 3/3: Cálculo de Scores")
-        logger.info("=" * 60)
-        
-        score_service = ScoreService(db)
-        
-        logger.info(f"Calculando scores para {end_date}...")
-        try:
-            score_service.calculate_and_store_scores(
-                tickers=TEST_TICKERS,
-                date=end_date
-            )
-            logger.info(f"✓ Scores calculados para {len(TEST_TICKERS)} ativos")
-        except Exception as e:
-            logger.error(f"✗ Erro ao calcular scores: {e}")
-            raise
-        
-        logger.info("")
-        
-        # 4. VERIFICAÇÃO
-        logger.info("=" * 60)
-        logger.info("VERIFICAÇÃO DOS RESULTADOS")
-        logger.info("=" * 60)
-        
-        from app.models.schemas import ScoreDaily
-        
-        scores = db.query(ScoreDaily).filter(
-            ScoreDaily.date == end_date
-        ).order_by(ScoreDaily.final_score.desc()).all()
-        
-        if scores:
-            logger.info(f"\n✓ {len(scores)} scores gerados para {end_date}\n")
-            logger.info("Ranking:")
-            for i, score in enumerate(scores, 1):
-                logger.info(
-                    f"  {i}. {score.ticker:6s} - Score: {score.final_score:.3f} "
-                    f"(M:{score.momentum_score:.2f} Q:{score.quality_score:.2f} V:{score.value_score:.2f})"
-                )
+        if result.returncode == 0:
+            print("")
+            print("=" * 60)
+            print("✓ PIPELINE DE TESTE CONCLUÍDO COM SUCESSO")
+            print("=" * 60)
+            print("")
+            print("Próximos passos:")
+            print("  1. Testar API:")
+            print("     curl http://localhost:8000/api/v1/top?n=5")
+            print("")
+            print("  2. Verificar scores no banco:")
+            print("     python scripts/check_latest_scores.py")
+            print("")
+            return 0
         else:
-            logger.warning("✗ Nenhum score foi gerado!")
-        
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("PIPELINE DE TESTE CONCLUÍDO")
-        logger.info("=" * 60)
-        
+            print("")
+            print("=" * 60)
+            print("✗ PIPELINE FALHOU")
+            print("=" * 60)
+            return 1
+            
+    except subprocess.TimeoutExpired:
+        print("")
+        print("=" * 60)
+        print("✗ TIMEOUT - Pipeline demorou mais de 10 minutos")
+        print("=" * 60)
+        return 1
     except Exception as e:
-        logger.error(f"Erro no pipeline: {e}", exc_info=True)
-        sys.exit(1)
-    
-    finally:
-        db.close()
+        print(f"✗ Erro ao executar pipeline: {e}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
