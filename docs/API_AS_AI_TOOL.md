@@ -649,3 +649,4 @@ def get_stock_ranking_limited(top_n: int = 10):
 **Versão**: 2.7.0  
 **Data**: Março 2026  
 **Status**: ✅ Pronto para Integração
+    
