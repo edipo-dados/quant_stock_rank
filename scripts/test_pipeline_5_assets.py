@@ -5,8 +5,14 @@ Script de teste do pipeline com apenas 5 ativos.
 """
 
 import sys
+import os
+from pathlib import Path
 from datetime import datetime, timedelta
 import logging
+
+# Adicionar diretório raiz ao PYTHONPATH
+root_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(root_dir))
 
 from app.models.database import SessionLocal
 from app.ingestion.ingestion_service import IngestionService
