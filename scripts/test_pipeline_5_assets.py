@@ -60,7 +60,12 @@ def main():
         logger.info("ETAPA 1/3: Ingestão de Preços")
         logger.info("=" * 60)
         
-        ingestion_service = IngestionService(db)
+        from app.ingestion.yahoo_client import YahooFinanceClient
+        from app.ingestion.yahoo_finance_client import YahooFinanceClient as YahooFundamentalsClient
+        
+        yahoo_client = YahooFinanceClient()
+        yahoo_fundamentals_client = YahooFundamentalsClient()
+        ingestion_service = IngestionService(yahoo_client, yahoo_fundamentals_client, db)
         
         for ticker in TEST_TICKERS:
             logger.info(f"Baixando preços de {ticker}...")
