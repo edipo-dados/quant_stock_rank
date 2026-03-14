@@ -1,242 +1,293 @@
-# Quant Stock Ranker - Sistema de Ranking Quantitativo de Ações
+# Quant Stock Ranker v2.7.0
 
-Sistema quantitativo para ranking e seleção de ações da B3 usando modelo multifator otimizado.
+Sistema de ranking quantitativo de ações da B3 baseado em modelo multifator.
 
-## 🎯 Visão Geral
+## Arquitetura
 
-Sistema completo de análise quantitativa que:
-- Ingere dados de preços e fundamentalistas de ações brasileiras
-- Calcula fatores quantitativos (momentum, value, quality, risk)
-- Gera ranking ponderado por scores
-- Executa backtests com filtros de regime de mercado
-- **Volatility targeting para controle de risco (v2.7.0)**
-- **Limites de exposição por setor (v2.7.0)**
-- Fornece API REST e interface Streamlit
+```
+┌─────────────┐    ┌─────────────┐    ┌──────────────┐
+│  Yahoo Fin  │───▶│   Backend   │───▶│  PostgreSQL  │
+│  (Dados)    │    │  (FastAPI)  │    │   (Banco)    │
+└─────────────┘    └──────┬──────┘    └──────────────┘
+                          │
+                   ┌──────┴──────┐
+                   │  Frontend   │
+                   │ (Streamlit) │
+                   └─────────────┘
+```
 
-## 📊 Modelo Quantitativo
+## Stack
 
-### Fatores e Pesos (Otimizados)
+- Backend: FastAPI + SQLAlchemy
+- Frontend: Streamlit
+- Banco: PostgreSQL
+- Deploy: Docker Compose no EC2
+
+## Modelo Multifator
 
 | Fator | Peso | Descrição |
 |-------|------|-----------|
-| **Momentum** | 50% | Retornos 12M, 6M, 3M com skip de 1 mês |
-| **Value** | 25% | P/E, P/B, EV/EBITDA, Dividend Yield |
-| **Quality** | 15% | ROE, ROA, Debt/EBITDA, Margem Líquida |
-| **Risk** | 10% | Volatilidade e Max Drawdown (penalização) |
+| Momentum | 50% | Retornos 6m e 12m (ex-1m), RSI |
+| Value | 25% | P/E, EV/EBITDA, P/B |
+| Quality | 15% | ROE, margem líquida, crescimento receita |
+| Risk | 10% | Volatilidade 90d, drawdown recente |
 
-### Filtros de Elegibilidade
+## Melhorias v2.7.0
 
-- **Liquidez**: Volume médio diário > R$ 5.000.000
-- **Market Cap**: Capitalização > R$ 1.000.000.000
-- **Universo**: Componentes do Ibovespa + ações líquidas da B3
-
-### Otimizações Implementadas
-
-1. **Score-Weighted Portfolio**: Pesos proporcionais aos scores (máx 25% por ativo)
-2. **Market Regime Filter**: Filtro baseado em MA200 do IBOVESPA
-3. **Temporal Smoothing**: 70% score atual + 30% score anterior
-4. **Rebalanceamento Mensal**: Reduz custos de transação
-5. **Normalização Min-Max**: Scores entre 0-1 para cada fator
-6. **Volatility Targeting (v2.7.0)**: Ajusta exposição para volatilidade alvo de 15%
-7. **Sector Limits (v2.7.0)**: Máximo 30% de exposição por setor
-
-## 🚀 Quick Start
-
-### Pré-requisitos
-
-- Docker e Docker Compose
-- Chaves de API: FMP (Financial Modeling Prep)
-
-### Configuração
-
-1. Clone o repositório:
-```bash
-git clone <repo-url>
-cd quant_stock_rank
-```
-
-2. Configure variáveis de ambiente:
-```bash
-cp .env.example .env
-# Edite .env e adicione sua FMP_API_KEY
-```
-
-3. Inicie os containers:
-```bash
-docker-compose up -d
-```
-
-4. Execute o pipeline completo:
-```bash
-docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py
-```
-
-### Acessar Aplicação
-
-- **Frontend (Streamlit)**: http://localhost:8501
-- **API (FastAPI)**: http://localhost:8000
-- **Documentação API**: http://localhost:8000/docs
-
-## 📁 Estrutura do Projeto
-
-```
-quant_stock_rank/
-├── app/
-│   ├── api/              # Endpoints REST
-│   ├── backtest/         # Engine de backtesting
-│   ├── confidence/       # Cálculo de confiança
-│   ├── factor_engine/    # Cálculo de fatores
-│   ├── filters/          # Filtros de elegibilidade
-│   ├── ingestion/        # Ingestão de dados
-│   ├── models/           # Schemas do banco
-│   ├── scoring/          # Sistema de scoring
-│   └── config.py         # Configurações centralizadas
-├── frontend/             # Interface Streamlit
-├── scripts/              # Scripts utilitários
-├── docs/                 # Documentação técnica
-└── docker/               # Dockerfiles
-```
-
-## 🔧 Scripts Principais
-
-### Pipeline Completo
-```bash
-# Executa ingestão + cálculo de scores + ranking
-docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py
-```
-
-### Backtest Otimizado
-```bash
-# Versão v2.6.0 (baseline otimizado)
-docker exec -it quant-ranker-backend python scripts/run_optimized_backtest.py
-
-# Versão v2.7.0 (com volatility targeting e sector limits)
-docker exec -it quant-ranker-backend python scripts/run_enhanced_backtest.py
-```
-
-### Ingestão de Benchmark
-```bash
-# Ingere dados do IBOVESPA para comparação
-docker exec -it quant-ranker-backend python scripts/ingest_benchmark.py
-```
-
-### Atualizar Universo de Ações
-```bash
-# Atualiza lista de ações líquidas dinamicamente
-docker exec -it quant-ranker-backend python scripts/update_liquid_stocks.py
-```
-
-### Gerar Snapshots Históricos
-```bash
-# Gera rankings históricos para backtest
-docker exec -it quant-ranker-backend python scripts/generate_historical_scores.py \
-  --start 2022-01-01 --end 2026-03-01 --frequency monthly
-```
-
-## 📈 Performance do Backtest
-
-Resultados do backtest otimizado (2022-2026):
-
-| Métrica | Valor |
-|---------|-------|
-| **Total Return** | 16.78% |
-| **CAGR** | 5.31% |
-| **Volatilidade** | 15.62% |
-| **Max Drawdown** | -18.01% |
-| **Sharpe Ratio** | 0.41 |
-| **Sortino Ratio** | 0.83 |
-| **Calmar Ratio** | 0.29 |
-| **Alpha Anual** | 23.07% |
-| **Beta** | 0.62 |
-| **Information Ratio** | -0.28 |
-
-## 🔄 Automação (Cron)
-
-Para atualização automática diária:
-
-```bash
-# Adicionar ao crontab
-0 19 * * 1-5 cd /home/ubuntu/quant_stock_rank && docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py >> /var/log/quant_ranker.log 2>&1
-```
-
-Ver `CRON_QUICKSTART.md` para detalhes.
-
-## 📚 Documentação
-
-- **[ROBUSTEZ_V2.7.0.md](ROBUSTEZ_V2.7.0.md)**: Melhorias de robustez v2.7.0
-- **[STRATEGY_OPTIMIZATION_QUICKSTART.md](STRATEGY_OPTIMIZATION_QUICKSTART.md)**: Guia de otimização da estratégia
-- **[BACKTEST_QUICKSTART.md](BACKTEST_QUICKSTART.md)**: Guia de backtesting
-- **[HISTORICAL_EXPANSION_QUICKSTART.md](HISTORICAL_EXPANSION_QUICKSTART.md)**: Expansão histórica de dados
-- **[CRON_QUICKSTART.md](CRON_QUICKSTART.md)**: Automação com cron
-- **[docs/STRATEGY_OPTIMIZATION_PLAN.md](docs/STRATEGY_OPTIMIZATION_PLAN.md)**: Plano técnico completo
-- **[docs/REGRAS_E_CONFIGURACOES.md](docs/REGRAS_E_CONFIGURACOES.md)**: Regras de negócio completas
-- **[deploy/](deploy/)**: Guias de deployment
-
-## 🛠️ Tecnologias
-
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy
-- **Frontend**: Streamlit
-- **Dados**: yfinance, FMP API
-- **Banco**: SQLite (produção: PostgreSQL)
-- **Deploy**: Docker, Docker Compose, Nginx
-
-## 📊 API Endpoints
-
-### Ranking Atual
-```bash
-GET /api/ranking/latest
-```
-
-### Ranking por Data
-```bash
-GET /api/ranking/date/{date}
-```
-
-### Histórico de Ativo
-```bash
-GET /api/asset/{ticker}/history
-```
-
-### Executar Pipeline
-```bash
-POST /api/pipeline/run
-```
-
-Ver documentação completa em `/docs` após iniciar a API.
-
-## 🧪 Validação de Dados
-
-```bash
-# Verificar cobertura de dados
-docker exec -it quant-ranker-backend python scripts/check_historical_coverage.py
-
-# Validar dados de backtest
-docker exec -it quant-ranker-backend python scripts/check_backtest_data.py
-
-# Verificar scores mais recentes
-docker exec -it quant-ranker-backend python scripts/check_latest_scores.py
-```
-
-## 🔐 Segurança
-
-- Nunca commite `.env` com chaves reais
-- Use `.env.example` como template
-- Em produção, use secrets management (AWS Secrets Manager, etc)
-
-## 📝 Licença
-
-Proprietary - Todos os direitos reservados
-
-## 👥 Contribuindo
-
-Este é um projeto privado. Para contribuir, entre em contato com os mantenedores.
-
-## 📞 Suporte
-
-Para questões técnicas, consulte a documentação em `docs/` ou abra uma issue.
+- Correção definitiva do cálculo de Alpha (CAPM)
+- Volatility Targeting (alvo 15% anual)
+- Limites de exposição por setor (máx 30%)
+- Validações robustas de métricas
 
 ---
 
-**Última atualização**: Março 2026  
+## Pipelines - Ordem de Execução
+
+### 1. Pipeline de Dados (obrigatório, rodar primeiro)
+
+Baixa preços do Yahoo Finance, calcula features e gera scores.
+
+```bash
+# Pipeline FULL (primeira execução ou reset)
+docker exec -it quant-ranker-backend python scripts/clear_and_run_full.py --mode liquid --limit 50
+
+# Pipeline INCREMENTAL (atualizações diárias)
+docker exec -it quant-ranker-backend python scripts/run_pipeline_docker.py --mode liquid --limit 50
+
+# Pipeline SMART (decide automaticamente entre FULL e INCREMENTAL)
+docker exec -it quant-ranker-backend python scripts/run_smart_pipeline.py
+```
+
+| Script | Quando usar | Tempo estimado |
+|--------|-------------|----------------|
+| `clear_and_run_full.py` | Primeira execução, reset de dados | 30-60 min |
+| `run_pipeline_docker.py` | Atualização diária | 10-20 min |
+| `run_smart_pipeline.py` | Automático (CRON) | 10-60 min |
+
+### 2. Pipeline de Backtest (opcional, após pipeline de dados)
+
+Simula a estratégia historicamente e calcula métricas de performance.
+
+```bash
+# Gerar scores históricos (necessário antes do backtest)
+docker exec -it quant-ranker-backend python scripts/generate_historical_scores.py
+
+# Executar backtest
+docker exec -it quant-ranker-backend python scripts/run_backtest_pipeline.py
+
+# Backtest com melhorias v2.7.0 (volatility targeting + sector limits)
+docker exec -it quant-ranker-backend python scripts/run_enhanced_backtest.py
+```
+
+| Script | Quando usar | Tempo estimado |
+|--------|-------------|----------------|
+| `generate_historical_scores.py` | Antes do primeiro backtest | 20-40 min |
+| `run_backtest_pipeline.py` | Backtest padrão | 5-15 min |
+| `run_enhanced_backtest.py` | Backtest com melhorias v2.7.0 | 5-15 min |
+
+### 3. Scripts Auxiliares
+
+```bash
+# Verificar scores mais recentes
+docker exec -it quant-ranker-backend python scripts/check_latest_scores.py
+
+# Verificar cobertura histórica
+docker exec -it quant-ranker-backend python scripts/check_historical_coverage.py
+
+# Atualizar lista de ações líquidas da B3
+docker exec -it quant-ranker-backend python scripts/update_liquid_stocks.py
+
+# Limpar dados de backtest
+docker exec -it quant-ranker-backend python scripts/clear_backtest_data.py
+
+# Aplicar suavização temporal nos scores
+docker exec -it quant-ranker-backend python scripts/apply_temporal_smoothing.py --all
+
+# Comparar estratégias
+docker exec -it quant-ranker-backend python scripts/compare_strategies.py
+```
+
+---
+
+## Deploy no EC2
+
+### Primeiro Deploy
+
+```bash
+# 1. Clonar repositório
+git clone https://github.com/edipo-dados/quant_stock_rank.git
+cd quant_stock_rank
+
+# 2. Configurar .env
+cp .env.example .env
+# Editar .env com suas configurações
+
+# 3. Subir containers
+docker-compose up -d
+
+# 4. Criar tabelas do banco
+docker exec -it quant-ranker-backend python scripts/init_db.py
+
+# 5. Criar tabelas de backtest
+docker exec -it quant-ranker-backend python -c 'from app.models.database import engine, Base; from app.backtest.models import *; Base.metadata.create_all(bind=engine); print("OK")'
+
+# 6. Executar pipeline de dados
+docker exec -it quant-ranker-backend python scripts/clear_and_run_full.py --mode liquid --limit 50
+```
+
+### Atualizar Deploy
+
+```bash
+cd ~/quant_stock_rank
+docker-compose down
+git pull origin main
+docker-compose build backend
+docker-compose up -d
+```
+
+### Verificar Status
+
+```bash
+# Containers rodando
+docker ps
+
+# Health check da API
+curl http://localhost:8000/health
+
+# Logs do backend
+docker logs quant-ranker-backend --tail 50
+```
+
+### Liberar Portas (Security Group AWS)
+
+| Porta | Serviço |
+|-------|---------|
+| 8000 | API (FastAPI) |
+| 8501 | Frontend (Streamlit) |
+
+---
+
+## API
+
+### Endpoints
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/health` | GET | Status da API |
+| `/api/v1/ranking` | GET | Ranking completo |
+| `/api/v1/top?n=10` | GET | Top N ações |
+| `/api/v1/asset/{ticker}` | GET | Detalhes de uma ação |
+| `/api/v1/ranking?date=YYYY-MM-DD` | GET | Ranking de data específica |
+| `/api/v1/prices/{ticker}` | GET | Histórico de preços |
+
+### Exemplo de Uso
+
+```python
+import requests
+
+# Top 10 ações
+response = requests.get("http://seu-ec2-ip:8000/api/v1/top?n=10")
+data = response.json()
+
+for asset in data['top_assets']:
+    print(f"{asset['rank']}. {asset['ticker']} - Score: {asset['final_score']:.3f}")
+```
+
+### Documentação Interativa
+
+```
+http://seu-ec2-ip:8000/docs
+```
+
+---
+
+## CRON (Atualização Automática)
+
+```bash
+# Editar crontab
+crontab -e
+
+# Executar pipeline diariamente às 20h (após fechamento B3)
+0 20 * * 1-5 docker exec quant-ranker-backend python scripts/run_smart_pipeline.py >> /var/log/quant-pipeline.log 2>&1
+```
+
+---
+
+## Configuração
+
+Parâmetros principais em `app/config.py` ou via variáveis de ambiente:
+
+### Pesos do Modelo
+```
+MOMENTUM_WEIGHT=0.50
+QUALITY_WEIGHT=0.15
+VALUE_WEIGHT=0.25
+RISK_WEIGHT=0.10
+```
+
+### Gerenciamento de Risco (v2.7.0)
+```
+USE_VOLATILITY_TARGETING=true
+TARGET_PORTFOLIO_VOLATILITY=0.15
+VOLATILITY_LOOKBACK_DAYS=90
+USE_SECTOR_LIMITS=true
+MAX_SECTOR_EXPOSURE=0.30
+MAX_SINGLE_ASSET_WEIGHT=0.25
+```
+
+### Filtros de Elegibilidade
+```
+MINIMUM_VOLUME=5000000
+MINIMUM_MARKET_CAP=1000000000
+```
+
+---
+
+## Estrutura do Projeto
+
+```
+quant_stock_rank/
+├── app/                    # Código principal
+│   ├── api/                # API REST (FastAPI)
+│   ├── backtest/           # Engine de backtest
+│   ├── chat/               # Chat com Gemini
+│   ├── confidence/         # Motor de confiança
+│   ├── core/               # Exceções e utilitários
+│   ├── factor_engine/      # Cálculo de fatores
+│   ├── filters/            # Filtros de elegibilidade
+│   ├── ingestion/          # Ingestão de dados
+│   ├── models/             # Modelos SQLAlchemy
+│   ├── report/             # Geração de relatórios
+│   ├── research/           # App Streamlit de backtest
+│   └── scoring/            # Motor de scoring
+├── frontend/               # Frontend Streamlit
+├── scripts/                # Scripts de pipeline e utilitários
+├── deploy/                 # Scripts e docs de deploy
+├── docker/                 # Dockerfiles
+├── docs/                   # Documentação técnica
+└── tests/                  # Testes automatizados
+```
+
+---
+
+## Documentação
+
+| Documento | Descrição |
+|-----------|-----------|
+| `docs/REGRAS_E_CONFIGURACOES.md` | Regras completas do modelo |
+| `docs/CALCULOS_RANKING.md` | Detalhes dos cálculos |
+| `docs/API_QUICKSTART.md` | Guia rápido da API |
+| `docs/API_AS_AI_TOOL.md` | Integração da API com IA |
+| `docs/PIPELINE_ARCHITECTURE.md` | Arquitetura dos pipelines |
+| `docs/HISTORICAL_EXPANSION.md` | Expansão de dados históricos |
+| `docs/DOCKER.md` | Configuração Docker |
+| `docs/MCP_SERVER.md` | Servidor MCP |
+| `ROBUSTEZ_V2.7.0.md` | Melhorias de robustez v2.7.0 |
+| `CHANGELOG.md` | Histórico de mudanças |
+| `deploy/README.md` | Guia de deploy |
+
+---
+
 **Versão**: 2.7.0  
-**Novidades**: Volatility Targeting, Sector Limits, Alpha Corrigido
+**Licença**: Privado  
+**Repositório**: https://github.com/edipo-dados/quant_stock_rank

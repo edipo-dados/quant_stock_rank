@@ -1,71 +1,62 @@
-# Documentação do Quant Stock Ranker
+# Documentação - Índice
 
-Sistema quantitativo de ranking de ações da B3 com modelo multifator otimizado.
+## Documentação Principal
 
-## 📚 Índice Geral
+| Documento | Descrição |
+|-----------|-----------|
+| [README.md](../README.md) | Visão geral, pipelines e deploy |
+| [CHANGELOG.md](../CHANGELOG.md) | Histórico de mudanças |
+| [ROBUSTEZ_V2.7.0.md](../ROBUSTEZ_V2.7.0.md) | Melhorias de robustez v2.7.0 |
 
-### 🚀 Quick Start
-- **[../README.md](../README.md)** - Visão geral e instalação
-- **[../STRATEGY_OPTIMIZATION_QUICKSTART.md](../STRATEGY_OPTIMIZATION_QUICKSTART.md)** - Guia da estratégia otimizada
-- **[../BACKTEST_QUICKSTART.md](../BACKTEST_QUICKSTART.md)** - Guia de backtesting
-- **[../CRON_QUICKSTART.md](../CRON_QUICKSTART.md)** - Automação com cron
+## Documentação Técnica
 
-### 📖 Guias de Uso
-- **[GUIA_USO.md](GUIA_USO.md)** - Como usar o sistema
-- **[DOCKER.md](DOCKER.md)** - Configuração Docker
+| Documento | Descrição |
+|-----------|-----------|
+| [REGRAS_E_CONFIGURACOES.md](REGRAS_E_CONFIGURACOES.md) | Regras completas do modelo multifator |
+| [CALCULOS_RANKING.md](CALCULOS_RANKING.md) | Detalhes dos cálculos de ranking |
+| [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) | Arquitetura dos pipelines |
+| [MISSING_VALUE_TREATMENT.md](MISSING_VALUE_TREATMENT.md) | Tratamento de valores ausentes |
+| [BACKTEST_SMOOTHING.md](BACKTEST_SMOOTHING.md) | Suavização temporal no backtest |
+| [HISTORICAL_EXPANSION.md](HISTORICAL_EXPANSION.md) | Expansão de dados históricos |
 
-### ⚙️ Configurações e Regras
-- **[REGRAS_E_CONFIGURACOES.md](REGRAS_E_CONFIGURACOES.md)** - ⭐ Regras de negócio completas
-- **[CALCULOS_RANKING.md](CALCULOS_RANKING.md)** - Detalhes dos cálculos
-- **[MISSING_VALUE_TREATMENT.md](MISSING_VALUE_TREATMENT.md)** - Tratamento de missing data
+## API
 
-### 🏗️ Arquitetura
-- **[PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md)** - Arquitetura do pipeline
-- **[STRATEGY_OPTIMIZATION_PLAN.md](STRATEGY_OPTIMIZATION_PLAN.md)** - Plano técnico completo
+| Documento | Descrição |
+|-----------|-----------|
+| [API_QUICKSTART.md](API_QUICKSTART.md) | Guia rápido de uso da API |
+| [API_AS_AI_TOOL.md](API_AS_AI_TOOL.md) | Integração da API com soluções de IA |
 
-### 📊 Modelos Quantitativos
-- **[ACADEMIC_MOMENTUM_IMPLEMENTATION.md](ACADEMIC_MOMENTUM_IMPLEMENTATION.md)** - Momentum acadêmico
-- **[VALUE_SIZE_IMPLEMENTATION.md](VALUE_SIZE_IMPLEMENTATION.md)** - Fatores value e size
-- **[BACKTEST_SMOOTHING.md](BACKTEST_SMOOTHING.md)** - Temporal smoothing
-- **[HISTORICAL_EXPANSION.md](HISTORICAL_EXPANSION.md)** - Expansão histórica
+## Infraestrutura
 
-### 🔌 Integrações
-- **[CHAT_GEMINI.md](CHAT_GEMINI.md)** - Integração Gemini AI
-- **[MCP_SERVER.md](MCP_SERVER.md)** - Model Context Protocol
+| Documento | Descrição |
+|-----------|-----------|
+| [DOCKER.md](DOCKER.md) | Configuração Docker |
+| [MCP_SERVER.md](MCP_SERVER.md) | Servidor MCP |
+| [CHAT_GEMINI.md](CHAT_GEMINI.md) | Chat com Google Gemini |
+| [GUIA_USO.md](GUIA_USO.md) | Guia de uso do sistema |
 
-### 🚀 Deploy
-- **[../deploy/INDEX.md](../deploy/INDEX.md)** - Índice de deployment
-- **[../deploy/README.md](../deploy/README.md)** - Guia de deployment
-- **[../deploy/SETUP_NOVO_EC2.md](../deploy/SETUP_NOVO_EC2.md)** - Setup EC2
+## Deploy
 
-## 📊 Performance Atual
+| Documento | Descrição |
+|-----------|-----------|
+| [deploy/README.md](../deploy/README.md) | Guia principal de deploy |
+| [deploy/EC2_DEPLOY.md](../deploy/EC2_DEPLOY.md) | Deploy no EC2 |
+| [deploy/SETUP_NOVO_EC2.md](../deploy/SETUP_NOVO_EC2.md) | Setup de novo EC2 |
+| [deploy/CRON_SETUP.md](../deploy/CRON_SETUP.md) | Configuração de CRON |
+| [deploy/QUICK_REFERENCE.md](../deploy/QUICK_REFERENCE.md) | Referência rápida |
 
-| Métrica | Valor |
-|---------|-------|
-| CAGR | 5.31% |
-| Alpha Anual | 23.07% |
-| Sharpe Ratio | 0.41 |
-| Sortino Ratio | 0.83 |
-| Max Drawdown | -18.01% |
-| Turnover | 19.43% |
+## Scripts
 
-## 🎯 Modelo Multifator
+| Documento | Descrição |
+|-----------|-----------|
+| [scripts/README_SCRIPTS.md](../scripts/README_SCRIPTS.md) | Guia de todos os scripts |
 
-| Fator | Peso |
-|-------|------|
-| Momentum | 50% |
-| Value | 25% |
-| Quality | 15% |
-| Risk | 10% |
+## Quickstarts
 
-## 🔗 Links Rápidos
-
-- **Configurações**: `app/config.py`
-- **Métricas**: `app/backtest/metrics.py`
-- **Fatores**: `app/factor_engine/`
-- **Scripts**: `scripts/`
-
----
-
-**Última atualização**: Março 2026  
-**Versão**: 2.6.0
+| Documento | Descrição |
+|-----------|-----------|
+| [BACKTEST_QUICKSTART.md](../BACKTEST_QUICKSTART.md) | Quickstart de backtest |
+| [BACKTEST_PIPELINE.md](../BACKTEST_PIPELINE.md) | Pipeline de backtest |
+| [CRON_QUICKSTART.md](../CRON_QUICKSTART.md) | Quickstart de CRON |
+| [SMART_PIPELINE.md](../SMART_PIPELINE.md) | Pipeline inteligente |
+| [HISTORICAL_EXPANSION_QUICKSTART.md](../HISTORICAL_EXPANSION_QUICKSTART.md) | Expansão histórica |
