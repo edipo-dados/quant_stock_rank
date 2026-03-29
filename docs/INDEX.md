@@ -1,22 +1,29 @@
-# Documentação - Índice
+# Documentação - Quant Stock Ranker v2.8
 
-## Documentação Principal
+## Visão Geral
 
 | Documento | Descrição |
 |-----------|-----------|
-| [README.md](../README.md) | Visão geral, pipelines e deploy |
+| [README.md](../README.md) | Visão geral, quick start e comandos |
 | [CHANGELOG.md](../CHANGELOG.md) | Histórico de mudanças |
-| [ROBUSTEZ_V2.7.0.md](../ROBUSTEZ_V2.7.0.md) | Melhorias de robustez v2.7.0 |
+| [ARQUITETURA_COMPLETA.md](ARQUITETURA_COMPLETA.md) | Arquitetura com diagramas Mermaid |
 
-## Documentação Técnica
+## Modelo e Regras
 
 | Documento | Descrição |
 |-----------|-----------|
 | [REGRAS_E_CONFIGURACOES.md](REGRAS_E_CONFIGURACOES.md) | Regras completas do modelo multifator |
 | [CALCULOS_RANKING.md](CALCULOS_RANKING.md) | Detalhes dos cálculos de ranking |
-| [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) | Arquitetura dos pipelines |
 | [MISSING_VALUE_TREATMENT.md](MISSING_VALUE_TREATMENT.md) | Tratamento de valores ausentes |
-| [BACKTEST_SMOOTHING.md](BACKTEST_SMOOTHING.md) | Suavização temporal no backtest |
+| [ROBUSTEZ_V2.7.0.md](../ROBUSTEZ_V2.7.0.md) | Volatility targeting, sector limits, alpha |
+
+## Pipelines
+
+| Documento | Descrição |
+|-----------|-----------|
+| [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) | Arquitetura do pipeline de 3 camadas |
+| [SMART_PIPELINE.md](../SMART_PIPELINE.md) | Pipeline inteligente (FULL vs INCREMENTAL) |
+| [BACKTEST_PIPELINE.md](../BACKTEST_PIPELINE.md) | Pipeline de backtest automatizado |
 | [HISTORICAL_EXPANSION.md](HISTORICAL_EXPANSION.md) | Expansão de dados históricos |
 
 ## API
@@ -24,39 +31,29 @@
 | Documento | Descrição |
 |-----------|-----------|
 | [API_QUICKSTART.md](API_QUICKSTART.md) | Guia rápido de uso da API |
-| [API_AS_AI_TOOL.md](API_AS_AI_TOOL.md) | Integração da API com soluções de IA |
-
-## Infraestrutura
-
-| Documento | Descrição |
-|-----------|-----------|
-| [DOCKER.md](DOCKER.md) | Configuração Docker |
+| [API_AS_AI_TOOL.md](API_AS_AI_TOOL.md) | Integração da API com IA |
+| [CHAT_GEMINI.md](CHAT_GEMINI.md) | Chat assistente com Google Gemini |
 | [MCP_SERVER.md](MCP_SERVER.md) | Servidor MCP |
-| [CHAT_GEMINI.md](CHAT_GEMINI.md) | Chat com Google Gemini |
-| [GUIA_USO.md](GUIA_USO.md) | Guia de uso do sistema |
 
-## Deploy
+## Deploy e Operação
 
 | Documento | Descrição |
 |-----------|-----------|
-| [deploy/README.md](../deploy/README.md) | Guia principal de deploy |
+| [DEPLOY_V2.7.0.md](../DEPLOY_V2.7.0.md) | Guia de deploy completo |
 | [deploy/EC2_DEPLOY.md](../deploy/EC2_DEPLOY.md) | Deploy no EC2 |
 | [deploy/SETUP_NOVO_EC2.md](../deploy/SETUP_NOVO_EC2.md) | Setup de novo EC2 |
 | [deploy/CRON_SETUP.md](../deploy/CRON_SETUP.md) | Configuração de CRON |
-| [deploy/QUICK_REFERENCE.md](../deploy/QUICK_REFERENCE.md) | Referência rápida |
-
-## Scripts
-
-| Documento | Descrição |
-|-----------|-----------|
+| [deploy/QUICK_REFERENCE.md](../deploy/QUICK_REFERENCE.md) | Referência rápida de comandos |
 | [scripts/README_SCRIPTS.md](../scripts/README_SCRIPTS.md) | Guia de todos os scripts |
 
-## Quickstarts
+## Acesso Rápido
 
-| Documento | Descrição |
-|-----------|-----------|
-| [BACKTEST_QUICKSTART.md](../BACKTEST_QUICKSTART.md) | Quickstart de backtest |
-| [BACKTEST_PIPELINE.md](../BACKTEST_PIPELINE.md) | Pipeline de backtest |
-| [CRON_QUICKSTART.md](../CRON_QUICKSTART.md) | Quickstart de CRON |
-| [SMART_PIPELINE.md](../SMART_PIPELINE.md) | Pipeline inteligente |
-| [HISTORICAL_EXPANSION_QUICKSTART.md](../HISTORICAL_EXPANSION_QUICKSTART.md) | Expansão histórica |
+**Quero rodar o pipeline:** → [SMART_PIPELINE.md](../SMART_PIPELINE.md)
+
+**Quero fazer backtest:** → [BACKTEST_PIPELINE.md](../BACKTEST_PIPELINE.md)
+
+**Quero fazer deploy no EC2:** → [DEPLOY_V2.7.0.md](../DEPLOY_V2.7.0.md)
+
+**Quero entender a arquitetura:** → [ARQUITETURA_COMPLETA.md](ARQUITETURA_COMPLETA.md)
+
+**Quero usar a API:** → [API_QUICKSTART.md](API_QUICKSTART.md)

@@ -1,6 +1,8 @@
-# Quant Stock Ranker v2.7.0
+# Quant Stock Ranker v2.8
 
 Sistema de ranking quantitativo de ações da B3 baseado em modelo multifator.
+
+**URL:** `http://eas-bot.duckdns.org:8501` (Frontend) | `http://eas-bot.duckdns.org:8000` (API)
 
 ## Arquitetura
 
@@ -23,14 +25,20 @@ Sistema de ranking quantitativo de ações da B3 baseado em modelo multifator.
 - Banco: PostgreSQL
 - Deploy: Docker Compose no EC2
 
-## Modelo Multifator
+## Modelo Multifator (v2.8 - Anti-Defensive Bias)
 
 | Fator | Peso | Descrição |
 |-------|------|-----------|
-| Momentum | 50% | Retornos 6m e 12m (ex-1m), RSI |
-| Value | 25% | P/E, EV/EBITDA, P/B |
-| Quality | 15% | ROE, margem líquida, crescimento receita |
-| Risk | 10% | Volatilidade 90d, drawdown recente |
+| Momentum | 60% | 12m ex-1m (50%), 6m ex-1m (30%), vol/drawdown (20%) |
+| Value | 20% | P/E, P/B, EV/EBITDA, FCF Yield, Earnings Yield |
+| Quality | 15% | ROE 3Y, margem líquida, crescimento receita |
+| Risk | 5% | Volatilidade 90d/1y, drawdown (reduzido para evitar viés defensivo) |
+
+**Novidades v2.8:**
+- Momentum dominante com peso 60% (12m_ex_1m como fator principal)
+- Risk weight reduzido de 10% para 5% (evita viés em utilities/Ambev)
+- Earnings Yield adicionado ao fator Value (Net Income / Market Cap)
+- Penalização para volatilidade muito baixa (percentil 20 → -10% no score)
 
 ## Melhorias v2.7.0
 
