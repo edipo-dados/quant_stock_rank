@@ -124,23 +124,6 @@ def update_liquid_stocks(
         print(f"Novos ativos adicionados: {len(new_tickers)}")
         print(f"Ativos desativados: {inactive_count}")
         
-        # Verificar ITUB3
-        itub3 = db.query(AssetInfo).filter(AssetInfo.ticker == 'ITUB3').first()
-        if itub3:
-            print(f"\n✓ ITUB3 status:")
-            print(f"  Encontrado no banco")
-        else:
-            print(f"\n⚠ ITUB3 não encontrado no banco!")
-            print(f"  Adicionando ITUB3 manualmente...")
-            itub3 = AssetInfo(
-                ticker='ITUB3',
-                company_name='Itaú Unibanco Holding S.A.',
-                last_updated=datetime.now()
-            )
-            db.add(itub3)
-            db.commit()
-            print(f"  ✓ ITUB3 adicionado")
-        
         print("="*80 + "\n")
         
     except Exception as e:
