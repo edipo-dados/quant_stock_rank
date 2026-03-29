@@ -43,11 +43,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-quant_ranker}
       DATABASE_URL: postgresql://${POSTGRES_USER:-quant_user}:${POSTGRES_PASSWORD:-quant_password}@postgres:5432/${POSTGRES_DB:-quant_ranker}
       
-      # Scoring Weights
-      MOMENTUM_WEIGHT: ${MOMENTUM_WEIGHT:-0.35}
-      QUALITY_WEIGHT: ${QUALITY_WEIGHT:-0.25}
-      VALUE_WEIGHT: ${VALUE_WEIGHT:-0.30}
-      SIZE_WEIGHT: ${SIZE_WEIGHT:-0.10}
+      # Scoring Weights (v2.8 - Anti-Defensive Bias)
+      MOMENTUM_WEIGHT: ${MOMENTUM_WEIGHT:-0.60}
+      QUALITY_WEIGHT: ${QUALITY_WEIGHT:-0.15}
+      VALUE_WEIGHT: ${VALUE_WEIGHT:-0.20}
+      RISK_WEIGHT: ${RISK_WEIGHT:-0.05}
+      SIZE_WEIGHT: ${SIZE_WEIGHT:-0.0}
       
       # API Configuration
       API_HOST: ${API_HOST:-0.0.0.0}

@@ -18,12 +18,17 @@ class Settings(BaseSettings):
     # API Keys
     fmp_api_key: str = ""  # Default vazio para testes
     
-    # Scoring Weights (Modelo Multifator Otimizado)
-    momentum_weight: float = 0.5   # Momentum premium (aumentado)
-    quality_weight: float = 0.15   # Quality premium (reduzido)
-    value_weight: float = 0.25     # Value premium (reduzido)
-    risk_weight: float = 0.10      # Low volatility premium
+    # Scoring Weights (Modelo Multifator v2.8 - Anti-Defensive Bias)
+    momentum_weight: float = 0.60   # Momentum premium (dominante - foco em retorno recente)
+    quality_weight: float = 0.15    # Quality premium
+    value_weight: float = 0.20     # Value premium (com earnings_yield e fcf_yield)
+    risk_weight: float = 0.05      # Low volatility premium (reduzido para evitar viés defensivo)
     size_weight: float = 0.0       # Size premium weight (0.0 = disabled)
+    
+    # Low Volatility Penalty (v2.8 - Anti-Defensive Bias)
+    low_vol_penalty_enabled: bool = True  # Penalizar ativos com volatilidade muito baixa
+    low_vol_percentile_threshold: float = 0.20  # Percentil 20 de volatilidade
+    low_vol_penalty_factor: float = 0.90  # Reduz score em 10% para ativos ultra-defensivos
     
     # Eligibility Filter Parameters
     minimum_volume: float = 5_000_000  # Minimum average daily volume (aumentado para 5M)

@@ -796,6 +796,46 @@ class FundamentalFactorCalculator:
             
         except (TypeError, ZeroDivisionError) as e:
             raise CalculationError(f"Error calculating FCF Yield: {e}")
+
+    def calculate_earnings_yield(self, fundamentals: Dict) -> float:
+        """
+        Calcula Earnings Yield (inverso do P/L).
+
+        Earnings Yield = Net Income / Market Cap
+
+        Métrica mais robusta que P/L isolado pois:
+        - Funciona melhor para comparações cross-sectional
+        - Não tem problema de divisão por zero quando EPS é negativo
+        - Maior yield = mais barato = melhor
+
+        Args:
+            fundamentals: Dict contendo net_income e market_cap
+
+        Returns:
+            Earnings Yield como float
+
+        Raises:
+            InsufficientDataError: Se dados necessários estão faltando
+            CalculationError: Se market cap é zero ou negativo
+        """
+        try:
+            net_income = fundamentals.get('net_income')
+            market_cap = fundamentals.get('market_cap')
+
+            if net_income is None or market_cap is None:
+                raise InsufficientDataError(
+                    "Missing net_income or market_cap for Earnings Yield calculation"
+                )
+
+            if market_cap <= 0:
+                raise CalculationError(
+                    f"Invalid market cap for Earnings Yield: {market_cap}"
+                )
+
+            return net_income / market_cap
+
+        except (TypeError, ZeroDivisionError) as e:
+            raise CalculationError(f"Error calculating Earnings Yield: {e}")
     
     def calculate_ev_ebitda_from_components(self, fundamentals: Dict) -> float:
         """
@@ -1274,6 +1314,13 @@ class FundamentalFactorCalculator:
         except (InsufficientDataError, CalculationError) as e:
             logger.warning(f"Could not calculate FCF Yield for {ticker}: {e}")
             factors['fcf_yield'] = None
+        
+        # Earnings Yield (v2.8 - Anti-Defensive Bias)
+        try:
+            factors['earnings_yield'] = self.calculate_earnings_yield(fundamentals_data)
+        except (InsufficientDataError, CalculationError) as e:
+            logger.warning(f"Could not calculate Earnings Yield for {ticker}: {e}")
+            factors['earnings_yield'] = None
         
         # EV/EBITDA (tentar calcular a partir de componentes se não tiver enterprise_value)
         if fundamentals_data.get('enterprise_value') is not None:

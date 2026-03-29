@@ -96,69 +96,65 @@ class ScoringEngine:
         """
         Calcula score de momentum a partir de fatores normalizados.
         
-        Score de momentum = média dos fatores de momentum normalizados.
+        Score de momentum = média ponderada dos fatores de momentum.
         
-        Fatores considerados (METODOLOGIA ACADÊMICA):
-        - momentum_6m_ex_1m: Retorno de 6 meses excluindo último mês (positivo é melhor)
-        - momentum_12m_ex_1m: Retorno de 12 meses excluindo último mês (positivo é melhor)
-        - volatility_90d: Volatilidade de 90 dias (INVERTIDO - menor é melhor)
-        - recent_drawdown: Drawdown recente (INVERTIDO - menor é melhor)
+        Fatores considerados (METODOLOGIA ACADÊMICA v2.8):
+        - momentum_12m_ex_1m: Retorno de 12 meses excluindo último mês (PESO DOMINANTE 50%)
+        - momentum_6m_ex_1m: Retorno de 6 meses excluindo último mês (PESO 30%)
+        - volatility_90d: Volatilidade de 90 dias (INVERTIDO - menor é melhor, PESO 10%)
+        - recent_drawdown: Drawdown recente (INVERTIDO - menor é melhor, PESO 10%)
         
-        NOTA: RSI foi removido conforme metodologia acadêmica.
-        Momentum exclui último mês para evitar reversão de curto prazo.
+        NOTA: momentum_12m_ex_1m é o padrão acadêmico (Jegadeesh & Titman, 1993)
+        que evita reversões de curto prazo. Recebe peso dominante.
         
         TRATAMENTO DE MISSING:
-        - Se fatores críticos (momentum_6m_ex_1m, momentum_12m_ex_1m) ausentes: score muito baixo
-        - Fatores secundários (volatility, drawdown) ausentes: usa apenas disponíveis
+        - Se fatores críticos (momentum_12m_ex_1m) ausentes: retorna NaN
+        - Fatores secundários ausentes: redistribui pesos
         
         Args:
             factors: Dicionário com fatores normalizados
             
         Returns:
-            Score de momentum (média dos fatores)
-            
-        Raises:
-            ValueError: Se todos os fatores obrigatórios estão faltando
+            Score de momentum (média ponderada dos fatores)
             
         Valida: Requisitos 4.1
         """
         import math
         
-        # Fatores críticos (momentum)
-        critical_factors = ['momentum_6m_ex_1m', 'momentum_12m_ex_1m']
-        # Fatores secundários (risco)
-        secondary_factors = ['volatility_90d', 'recent_drawdown']
+        # Fatores com pesos (nome, peso, invertido?)
+        factor_weights = [
+            ('momentum_12m_ex_1m', 0.50, False),  # Dominante - padrão acadêmico
+            ('momentum_6m_ex_1m', 0.30, False),    # Complementar
+            ('volatility_90d', 0.10, True),         # Risco - invertido
+            ('recent_drawdown', 0.10, True),        # Risco - invertido
+        ]
         
-        # Coleta fatores disponíveis
-        momentum_factors = []
-        missing_critical = []
+        # Verificar fator crítico: momentum_12m_ex_1m
+        mom_12m = factors.get('momentum_12m_ex_1m')
+        if mom_12m is None or (isinstance(mom_12m, float) and math.isnan(mom_12m)):
+            # Tentar fallback para momentum_6m_ex_1m como fator principal
+            mom_6m = factors.get('momentum_6m_ex_1m')
+            if mom_6m is None or (isinstance(mom_6m, float) and math.isnan(mom_6m)):
+                import numpy as np
+                return np.nan
         
-        # Verificar fatores críticos
-        for factor_name in critical_factors:
+        # Coletar fatores disponíveis com pesos
+        weighted_factors = []
+        total_weight = 0.0
+        
+        for factor_name, weight, inverted in factor_weights:
             value = factors.get(factor_name)
             if value is not None and not (isinstance(value, float) and math.isnan(value)):
-                momentum_factors.append(value)
-            else:
-                missing_critical.append(factor_name)
+                adjusted_value = -value if inverted else value
+                weighted_factors.append((adjusted_value, weight))
+                total_weight += weight
         
-        # Se fatores críticos estão ausentes, retorna score muito baixo
-        if missing_critical:
-            logger.warning(f"Critical momentum factors missing: {missing_critical}")
-            return -999.0
-        
-        # Adicionar fatores secundários se disponíveis
-        for factor_name in secondary_factors:
-            value = factors.get(factor_name)
-            if value is not None and not (isinstance(value, float) and math.isnan(value)):
-                momentum_factors.append(-value)  # Invertido - menor é melhor
-        
-        # Se nenhum fator disponível, retorna NaN
-        if not momentum_factors:
+        if not weighted_factors:
             import numpy as np
             return np.nan
         
-        # Calcular média dos fatores disponíveis
-        momentum_score = sum(momentum_factors) / len(momentum_factors)
+        # Calcular média ponderada (renormalizando pesos)
+        momentum_score = sum(v * (w / total_weight) for v, w in weighted_factors)
         
         return momentum_score
     
@@ -335,17 +331,20 @@ class ScoringEngine:
         """
         Calcula score de valor a partir de fatores normalizados.
         
-        Score de valor = média dos fatores de valor normalizados.
+        Score de valor = média ponderada dos fatores de valor normalizados.
         
-        Fatores considerados (EXPANDIDO):
+        Fatores considerados (v2.8 - Robustez Melhorada):
         - pe_ratio: P/L (INVERTIDO - menor é melhor)
         - ev_ebitda: EV/EBITDA (INVERTIDO - menor é melhor)
         - price_to_book: Price-to-Book (INVERTIDO - menor é melhor)
         - fcf_yield: FCF Yield (positivo é melhor - maior yield é melhor)
-        - debt_to_ebitda: Dívida/EBITDA (INVERTIDO - menor é melhor)
+        - earnings_yield: Earnings Yield (positivo é melhor - maior yield é melhor)
+        
+        NOTA: earnings_yield e fcf_yield são métricas mais robustas que
+        múltiplos baixos isolados, pois capturam geração de caixa real.
         
         TRATAMENTO DE MISSING:
-        - Se fatores críticos (pe_ratio, price_to_book) ausentes: score muito baixo
+        - Se fatores críticos (pe_ratio, price_to_book) ausentes: retorna NaN
         - Fatores secundários ausentes: usa apenas disponíveis
         
         Args:
@@ -354,17 +353,14 @@ class ScoringEngine:
         Returns:
             Score de valor (média dos fatores)
             
-        Raises:
-            ValueError: Se todos os fatores obrigatórios estão faltando
-            
         Valida: Requisitos 4.3
         """
         import math
         
         # Fatores críticos
         critical_factors = ['pe_ratio', 'price_to_book']
-        # Fatores secundários
-        secondary_factors = ['ev_ebitda', 'fcf_yield', 'debt_to_ebitda']
+        # Fatores secundários (inclui earnings_yield e fcf_yield para robustez)
+        secondary_factors = ['ev_ebitda', 'fcf_yield', 'earnings_yield']
         
         # Coleta fatores disponíveis
         value_factors = []
@@ -385,7 +381,6 @@ class ScoringEngine:
                 missing_critical.append(factor_name)
         
         # Se fatores críticos estão ausentes, retorna NaN
-        # (será tratado no calculate_final_score)
         if missing_critical:
             logger.debug(f"Critical value factors missing: {missing_critical}")
             import numpy as np
@@ -395,8 +390,8 @@ class ScoringEngine:
         for factor_name in secondary_factors:
             value = factors.get(factor_name)
             if value is not None and not (isinstance(value, float) and math.isnan(value)):
-                if factor_name == 'fcf_yield':
-                    value_factors.append(value)  # FCF Yield: maior é melhor
+                if factor_name in ['fcf_yield', 'earnings_yield']:
+                    value_factors.append(value)  # Yield: maior é melhor
                 else:
                     value_factors.append(-value)  # Outros: invertido - menor é melhor
         
@@ -450,6 +445,9 @@ class ScoringEngine:
         - volatility_1y: INVERTIDO (menor é melhor)
         - max_drawdown_1y: INVERTIDO (menor drawdown é melhor)
         
+        NOTA (v2.8): risk_weight reduzido para 0.05 para evitar que
+        baixa volatilidade domine o ranking (viés defensivo).
+        
         Args:
             factors: Dicionário com fatores normalizados
             
@@ -484,6 +482,57 @@ class ScoringEngine:
         risk_score = sum(risk_factors) / len(risk_factors)
         
         return risk_score
+    
+    def calculate_low_vol_penalty(
+        self,
+        factors: Dict[str, float],
+        all_volatilities: Optional[List[float]] = None
+    ) -> float:
+        """
+        Calcula penalização para ativos com volatilidade muito baixa.
+        
+        Ativos ultra-defensivos (volatilidade abaixo do percentil 20 do universo)
+        recebem uma penalização leve no score final para evitar concentração
+        excessiva em empresas como Ambev, utilities, etc.
+        
+        Args:
+            factors: Dicionário com fatores do ativo
+            all_volatilities: Lista de volatilidades de todos os ativos do universo.
+                            Se None, não aplica penalização.
+            
+        Returns:
+            Fator de penalização (0.90 a 1.0). 1.0 = sem penalização.
+        """
+        import math
+        import numpy as np
+        
+        from app.config import settings
+        
+        if not settings.low_vol_penalty_enabled:
+            return 1.0
+        
+        if all_volatilities is None or len(all_volatilities) < 5:
+            return 1.0
+        
+        vol_90d = factors.get('volatility_90d')
+        if vol_90d is None or (isinstance(vol_90d, float) and math.isnan(vol_90d)):
+            return 1.0
+        
+        # Calcular percentil threshold
+        threshold = np.percentile(
+            [v for v in all_volatilities if v is not None and not math.isnan(v)],
+            settings.low_vol_percentile_threshold * 100
+        )
+        
+        # Se volatilidade está abaixo do percentil threshold, penalizar
+        if vol_90d < threshold:
+            logger.debug(
+                f"Low volatility penalty applied: vol_90d={vol_90d:.4f} < "
+                f"threshold={threshold:.4f} (p{int(settings.low_vol_percentile_threshold*100)})"
+            )
+            return settings.low_vol_penalty_factor
+        
+        return 1.0
     
     def calculate_final_score(
         self, 
@@ -558,7 +607,8 @@ class ScoringEngine:
         ticker: str,
         fundamental_factors: Dict[str, float],
         momentum_factors: Dict[str, float],
-        confidence: float = 0.5
+        confidence: float = 0.5,
+        all_volatilities: Optional[List[float]] = None
     ) -> ScoreResult:
         """
         Calcula score completo para um ativo.
@@ -566,21 +616,18 @@ class ScoringEngine:
         Combina fatores fundamentalistas e de momentum em um score final único,
         retornando breakdown completo por categoria.
         
+        v2.8: Aplica penalização para ativos com volatilidade muito baixa
+        para evitar viés excessivo em empresas defensivas.
+        
         Args:
             ticker: Símbolo do ativo
             fundamental_factors: Dicionário com fatores fundamentalistas normalizados
-                                (roe, net_margin, revenue_growth_3y, debt_to_ebitda,
-                                 pe_ratio, ev_ebitda, pb_ratio, price_to_book, fcf_yield, size_factor)
             momentum_factors: Dicionário com fatores de momentum normalizados
-                            (momentum_6m_ex_1m, momentum_12m_ex_1m, volatility_90d, 
-                             volatility_1y, recent_drawdown, max_drawdown_1y)
             confidence: Score de confiança (0-1), default 0.5
+            all_volatilities: Lista de volatilidades de todos os ativos (para low-vol penalty)
             
         Returns:
             ScoreResult com final_score e breakdown por categoria
-            
-        Raises:
-            ValueError: Se fatores obrigatórios estão faltando
             
         Valida: Requisitos 4.1, 4.2, 4.3, 4.4, 4.7
         """
@@ -599,6 +646,12 @@ class ScoringEngine:
             momentum_score, quality_score, value_score, risk_score, size_score
         )
         
+        # Aplicar penalização para baixa volatilidade (v2.8 - Anti-Defensive Bias)
+        low_vol_penalty = self.calculate_low_vol_penalty(all_factors, all_volatilities)
+        if low_vol_penalty < 1.0:
+            final_score = final_score * low_vol_penalty
+            logger.debug(f"{ticker}: low-vol penalty applied ({low_vol_penalty:.2f})")
+        
         # Criar resultado
         result = ScoreResult(
             ticker=ticker,
@@ -613,7 +666,8 @@ class ScoringEngine:
         logger.debug(
             f"Scored {ticker}: final={final_score:.3f}, "
             f"momentum={momentum_score:.3f}, quality={quality_score:.3f}, "
-            f"value={value_score:.3f}, risk={risk_score:.3f}, size={size_score:.3f}"
+            f"value={value_score:.3f}, risk={risk_score:.3f}, size={size_score:.3f}, "
+            f"low_vol_penalty={low_vol_penalty:.2f}"
         )
         
         return result
